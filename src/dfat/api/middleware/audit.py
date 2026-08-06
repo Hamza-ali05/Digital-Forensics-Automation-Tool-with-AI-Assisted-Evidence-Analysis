@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,6 +25,23 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
         super().__init__(app)  # type: ignore[arg-type]
         self._audit_logger = audit_logger
 
+    def _extract_user_id(self, request: Request) -> Optional[str]:
+        """Best-effort extract of authenticated user ID from a Bearer JWT."""
+        auth = request.headers.get("Authorization")
+        if not auth or not auth.lower().startswith("bearer "):
+            return None
+        token = auth.split(" ", 1)[1].strip()
+        if not token:
+            return None
+        try:
+            container = request.app.state.container
+            jwt_handler = container.auth.jwt_handler()
+            claims = jwt_handler.decode_token(token)
+            subject = claims.get("sub")
+            return str(subject) if subject is not None else None
+        except Exception:  # noqa: BLE001 — audit must not fail the request
+            return None
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process a request and emit an audit entry.
 
@@ -44,6 +61,8 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
             if "." in client_host
             else "anon"
         )
+        request_id = getattr(request.state, "request_id", None)
+        user_id = self._extract_user_id(request)
         self._audit_logger.log_action(
             stage=PipelineStage.REPORTING,
             action="API_REQUEST",
@@ -54,6 +73,8 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
                 "status_code": response.status_code,
                 "response_time_ms": round(elapsed_ms, 2),
                 "client_ip": anonymised_ip,
+                "request_id": request_id,
+                "user_id": user_id,
             },
         )
         return response

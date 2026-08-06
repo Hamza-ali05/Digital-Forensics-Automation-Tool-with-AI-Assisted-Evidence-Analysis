@@ -1,4 +1,7 @@
-.PHONY: install install-dev install-forensic test test-unit test-integration test-all test-cov lint format type-check clean run-api run-pipeline all
+.PHONY: install install-dev install-forensic test test-unit test-integration test-all test-cov lint format type-check clean run-api run-pipeline db-init db-migrate db-upgrade db-downgrade db-current db-history test-auth test-database test-services test-middleware test-backend test-integration-auth all
+
+ALEMBIC := alembic -c src/dfat/database/migrations/alembic.ini
+export PYTHONPATH := src$(if $(PYTHONPATH),:$(PYTHONPATH),)
 
 install:
 	pip install -e .
@@ -24,6 +27,24 @@ test-all:
 test-cov:
 	pytest --cov=dfat --cov-report=term-missing --cov-report=html
 
+test-auth:
+	pytest tests/unit/auth/ -v
+
+test-database:
+	pytest tests/unit/database/ -v
+
+test-services:
+	pytest tests/unit/services/ -v
+
+test-middleware:
+	pytest tests/unit/middleware/ -v
+
+test-backend:
+	pytest tests/unit/database/ tests/unit/auth/ tests/unit/services/ tests/unit/middleware/ -v
+
+test-integration-auth:
+	pytest tests/integration/test_auth_flow.py -v
+
 lint:
 	ruff check src tests
 
@@ -48,5 +69,23 @@ run-api:
 run-pipeline:
 	python -m dfat
 
-all: format lint type-check test
+db-init:
+	mkdir -p data
+	$(ALEMBIC) upgrade head
 
+db-migrate:
+	$(ALEMBIC) revision --autogenerate -m "$(message)"
+
+db-upgrade:
+	$(ALEMBIC) upgrade head
+
+db-downgrade:
+	$(ALEMBIC) downgrade -1
+
+db-current:
+	$(ALEMBIC) current
+
+db-history:
+	$(ALEMBIC) history
+
+all: format lint type-check test

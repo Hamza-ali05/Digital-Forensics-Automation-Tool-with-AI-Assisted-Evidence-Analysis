@@ -2,19 +2,62 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, AsyncIterator
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from dfat.app import create_app
+from dfat.auth.jwt_handler import JWTHandler
+from dfat.auth.password import PasswordHasher
 from dfat.core.enums import ArtefactCategory, EvidenceType, HashAlgorithm, SuspicionLevel
 from dfat.core.models.artefact import Artefact, ArtefactSet, RankedArtefact
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
+from dfat.database.engine import DatabaseEngine
+from dfat.database.models.user import RoleORM, UserORM
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
 from dfat.infrastructure.storage.local_storage import LocalFileStorage
+from dfat.settings import AuthSettings
+
+TEST_JWT_SECRET = "test-secret-key-not-for-production"
+TEST_ADMIN_USERNAME = "admin"
+TEST_ADMIN_PASSWORD = "AdminPass123!"
+TEST_ANALYST_USERNAME = "analyst"
+TEST_ANALYST_PASSWORD = "AnalystPass12!"
+TEST_VIEWER_USERNAME = "viewer"
+TEST_VIEWER_PASSWORD = "ViewerPass123!"
+
+_ROLE_SEEDS: list[dict[str, Any]] = [
+    {
+        "id": "role-admin",
+        "name": "admin",
+        "description": "Full system administrator",
+        "permissions": '{"all": true}',
+    },
+    {
+        "id": "role-investigator",
+        "name": "investigator",
+        "description": "Lead forensic investigator",
+        "permissions": "{}",
+    },
+    {
+        "id": "role-analyst",
+        "name": "analyst",
+        "description": "Forensic analyst",
+        "permissions": "{}",
+    },
+    {
+        "id": "role-viewer",
+        "name": "viewer",
+        "description": "Read-only viewer",
+        "permissions": "{}",
+    },
+]
 
 
 @pytest.fixture
@@ -157,15 +200,212 @@ def mock_storage(tmp_path: Path) -> LocalFileStorage:
 
 
 @pytest.fixture
-def app_client(tmp_path: Path) -> TestClient:
-    """Return a FastAPI TestClient with isolated storage directories."""
+def fixtures_dir() -> Path:
+    """Return the path to the tests/fixtures directory."""
+    return Path(__file__).resolve().parent / "fixtures"
+
+
+# ---------------------------------------------------------------------------
+# Prompt 2 fixtures — database, auth, and API client
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def db_engine() -> AsyncIterator[DatabaseEngine]:
+    """Create an isolated in-memory SQLite engine for one test."""
+    import dfat.database  # noqa: F401 — register ORM metadata
+
+    engine = DatabaseEngine(
+        database_url="sqlite+aiosqlite:///:memory:",
+        echo=False,
+    )
+    await engine.create_tables()
+    try:
+        yield engine
+    finally:
+        try:
+            await engine.drop_tables()
+        except Exception:  # noqa: BLE001 — engine may already be disposed
+            pass
+        try:
+            await engine.dispose()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@pytest.fixture
+async def db_session(db_engine: DatabaseEngine) -> AsyncIterator[AsyncSession]:
+    """Yield a database session that rolls back on cleanup."""
+    session = db_engine.session_factory()
+    try:
+        yield session
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+@pytest.fixture
+async def seeded_db(db_engine: DatabaseEngine) -> dict[str, Any]:
+    """Seed default roles plus admin, analyst, and viewer test users."""
+    hasher = PasswordHasher()
+    admin_id = "user-admin-00000000-0000-0000-0000-000000000001"
+    analyst_id = "user-analyst-00000000-0000-0000-0000-000000000002"
+    viewer_id = "user-viewer-00000000-0000-0000-0000-000000000003"
+    now = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
+
+    async with db_engine.session_factory() as session:
+        for seed in _ROLE_SEEDS:
+            session.add(
+                RoleORM(
+                    id=str(seed["id"]),
+                    name=str(seed["name"]),
+                    description=str(seed["description"]),
+                    permissions=str(seed["permissions"]),
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        session.add(
+            UserORM(
+                id=admin_id,
+                username=TEST_ADMIN_USERNAME,
+                email="admin@example.com",
+                hashed_password=hasher.hash_password(TEST_ADMIN_PASSWORD),
+                full_name="Test Admin",
+                role_id="role-admin",
+                is_active=True,
+                is_locked=False,
+                failed_login_attempts=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            UserORM(
+                id=analyst_id,
+                username=TEST_ANALYST_USERNAME,
+                email="analyst@example.com",
+                hashed_password=hasher.hash_password(TEST_ANALYST_PASSWORD),
+                full_name="Test Analyst",
+                role_id="role-analyst",
+                is_active=True,
+                is_locked=False,
+                failed_login_attempts=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            UserORM(
+                id=viewer_id,
+                username=TEST_VIEWER_USERNAME,
+                email="viewer@example.com",
+                hashed_password=hasher.hash_password(TEST_VIEWER_PASSWORD),
+                full_name="Test Viewer",
+                role_id="role-viewer",
+                is_active=True,
+                is_locked=False,
+                failed_login_attempts=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    return {
+        "user_ids": {
+            "admin": admin_id,
+            "analyst": analyst_id,
+            "viewer": viewer_id,
+        },
+        "role_ids": {
+            "admin": "role-admin",
+            "investigator": "role-investigator",
+            "analyst": "role-analyst",
+            "viewer": "role-viewer",
+        },
+        "credentials": {
+            "admin": (TEST_ADMIN_USERNAME, TEST_ADMIN_PASSWORD),
+            "analyst": (TEST_ANALYST_USERNAME, TEST_ANALYST_PASSWORD),
+            "viewer": (TEST_VIEWER_USERNAME, TEST_VIEWER_PASSWORD),
+        },
+    }
+
+
+@pytest.fixture
+def password_hasher() -> PasswordHasher:
+    """Return a PasswordHasher instance."""
+    return PasswordHasher()
+
+
+@pytest.fixture
+def jwt_handler() -> JWTHandler:
+    """Return a JWTHandler configured with the test secret key."""
+    return JWTHandler(
+        secret_key=TEST_JWT_SECRET,
+        algorithm="HS256",
+        access_token_expire_minutes=60,
+        refresh_token_expire_days=7,
+    )
+
+
+@pytest.fixture
+def auth_settings() -> AuthSettings:
+    """Return deterministic auth settings for service unit tests."""
+    return AuthSettings(
+        secret_key=TEST_JWT_SECRET,
+        max_login_attempts=5,
+        lockout_duration_minutes=30,
+        password_min_length=12,
+    )
+
+
+def _make_token(
+    jwt_handler: JWTHandler,
+    seeded_db: dict[str, Any],
+    role: str,
+) -> str:
+    """Create a non-expired access token for a seeded user role."""
+    user_id = seeded_db["user_ids"][role]
+    username = seeded_db["credentials"][role][0]
+    access, _refresh, _jti = jwt_handler.create_token_pair(user_id, username, role)
+    return access
+
+
+@pytest.fixture
+def test_admin_token(jwt_handler: JWTHandler, seeded_db: dict[str, Any]) -> str:
+    """Return a valid admin access JWT."""
+    return _make_token(jwt_handler, seeded_db, "admin")
+
+
+@pytest.fixture
+def test_analyst_token(jwt_handler: JWTHandler, seeded_db: dict[str, Any]) -> str:
+    """Return a valid analyst access JWT."""
+    return _make_token(jwt_handler, seeded_db, "analyst")
+
+
+@pytest.fixture
+def test_viewer_token(jwt_handler: JWTHandler, seeded_db: dict[str, Any]) -> str:
+    """Return a valid viewer access JWT."""
+    return _make_token(jwt_handler, seeded_db, "viewer")
+
+
+@pytest.fixture
+async def app_client(
+    db_engine: DatabaseEngine,
+    seeded_db: dict[str, Any],
+    jwt_handler: JWTHandler,
+    tmp_path: Path,
+) -> AsyncIterator[TestClient]:
+    """Return a TestClient wired to the isolated test database and auth."""
+    from dfat.core.enums import HashAlgorithm
     from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
     from dfat.infrastructure.repositories.artefact_repo import JSONArtefactRepository
     from dfat.infrastructure.repositories.evidence_repo import FileSystemEvidenceRepository
     from dfat.infrastructure.repositories.report_repo import FileSystemReportRepository
     from dfat.infrastructure.storage.local_storage import LocalFileStorage
     from dfat.infrastructure.storage.secure_storage import SecureStorage
-    from dfat.core.enums import HashAlgorithm
 
     evidence_dir = tmp_path / "evidence"
     reports_dir = tmp_path / "reports"
@@ -180,20 +420,32 @@ def app_client(tmp_path: Path) -> TestClient:
     secure = SecureStorage(reports_dir)
     audit = ForensicAuditLogger(audit_path, HashAlgorithm.SHA256)
 
+    container.database.database_engine.override(db_engine)
+    container.auth.jwt_handler.override(jwt_handler)
+    container.auth.password_hasher.override(PasswordHasher())
     container.storage.local_storage.override(local)
     container.storage.secure_storage.override(secure)
     container.logging.forensic_audit_logger.override(audit)
-    container.repositories.evidence_repo.override(FileSystemEvidenceRepository(local))
-    container.repositories.artefact_repo.override(JSONArtefactRepository(local))
-    container.repositories.report_repo.override(FileSystemReportRepository(secure))
-
-    # Rebuild pipeline orchestrator so it uses the isolated repositories.
+    container.repositories.file_evidence_repo.override(FileSystemEvidenceRepository(local))
+    container.repositories.file_artefact_repo.override(JSONArtefactRepository(local))
+    container.repositories.file_report_repo.override(FileSystemReportRepository(secure))
     container.pipeline.pipeline_orchestrator.reset()
 
-    return TestClient(app)
-
-
-@pytest.fixture
-def fixtures_dir() -> Path:
-    """Return the path to the tests/fixtures directory."""
-    return Path(__file__).resolve().parent / "fixtures"
+    client = TestClient(app)
+    # Convenience attributes for Prompt 1 route tests (auth required).
+    client.admin_token = _make_token(jwt_handler, seeded_db, "admin")  # type: ignore[attr-defined]
+    client.analyst_token = _make_token(jwt_handler, seeded_db, "analyst")  # type: ignore[attr-defined]
+    client.viewer_token = _make_token(jwt_handler, seeded_db, "viewer")  # type: ignore[attr-defined]
+    client.seeded_db = seeded_db  # type: ignore[attr-defined]
+    try:
+        yield client
+    finally:
+        container.database.database_engine.reset_override()
+        container.auth.jwt_handler.reset_override()
+        container.auth.password_hasher.reset_override()
+        container.storage.local_storage.reset_override()
+        container.storage.secure_storage.reset_override()
+        container.logging.forensic_audit_logger.reset_override()
+        container.repositories.file_evidence_repo.reset_override()
+        container.repositories.file_artefact_repo.reset_override()
+        container.repositories.file_report_repo.reset_override()

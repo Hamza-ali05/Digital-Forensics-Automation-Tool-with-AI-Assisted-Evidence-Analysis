@@ -18,6 +18,7 @@ class EvidenceResponse(BaseModel):
     evidence_type: EvidenceType
     original_hash: str
     case: dict[str, Any]
+    registered_by: Optional[str] = None
 
 
 class AnalysisStatusResponse(BaseModel):
@@ -60,3 +61,4 @@ class ErrorResponse(BaseModel):
     message: str
     timestamp: datetime
     details: dict[str, Any] = Field(default_factory=dict)
+    request_id: Optional[str] = None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Callable
 
 from fastapi import Request, Response
@@ -9,7 +10,11 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from dfat.api.schemas.responses import ErrorResponse
-from datetime import UTC, datetime
+
+_FORM_CONTENT_TYPES = (
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+)
 
 
 class RequestValidationMiddleware(BaseHTTPMiddleware):
@@ -31,7 +36,9 @@ class RequestValidationMiddleware(BaseHTTPMiddleware):
         """
         super().__init__(app)  # type: ignore[arg-type]
         self._max_body_bytes = max_body_bytes
-        self._require_json_methods = require_json_methods or frozenset({"POST", "PUT", "PATCH"})
+        self._require_json_methods = require_json_methods or frozenset(
+            {"POST", "PUT", "PATCH"}
+        )
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Validate request headers/size then continue.
@@ -63,9 +70,13 @@ class RequestValidationMiddleware(BaseHTTPMiddleware):
         if (
             request.method in self._require_json_methods
             and request.url.path.startswith("/api/")
+            and request.url.path != "/api/v1/auth/login"
         ):
             content_type = request.headers.get("content-type", "")
-            if content_type and "application/json" not in content_type.lower():
+            lowered = content_type.lower()
+            is_json = "application/json" in lowered
+            is_form = any(form_type in lowered for form_type in _FORM_CONTENT_TYPES)
+            if content_type and not is_json and not is_form:
                 return JSONResponse(
                     status_code=415,
                     content=ErrorResponse(

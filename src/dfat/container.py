@@ -43,7 +43,33 @@ from dfat.pipeline import PipelineOrchestrator
 from dfat.reporting.json_layer import StructuredJSONExporter
 from dfat.reporting.narrative import NarrativeAssembler
 from dfat.reporting.report_builder import DualOutputReportBuilder
-from dfat.settings import AIEngineSettings, DFATSettings, LoggingSettings, load_settings
+from dfat.auth.jwt_handler import JWTHandler
+from dfat.auth.password import PasswordHasher
+from dfat.auth.rbac import PermissionChecker
+from dfat.database.engine import DatabaseEngine
+from dfat.database.repositories.artefact_repo import SQLAlchemyArtefactRepository
+from dfat.database.repositories.audit_repo import SQLAlchemyAuditRepository
+from dfat.database.repositories.evaluation_repo import (
+    SQLAlchemyBenchmarkRepository,
+    SQLAlchemyUsabilityRepository,
+)
+from dfat.database.repositories.evidence_repo import SQLAlchemyEvidenceRepository
+from dfat.database.repositories.report_repo import SQLAlchemyReportRepository
+from dfat.database.repositories.session_repo import SessionRepository
+from dfat.database.repositories.user_repo import SQLAlchemyUserRepository
+from dfat.services.analysis_service import AnalysisService
+from dfat.services.audit_service import AuditService
+from dfat.services.evaluation_service import EvaluationService
+from dfat.services.evidence_service import EvidenceService
+from dfat.services.report_service import ReportService
+from dfat.services.user_service import UserService
+from dfat.settings import (
+    AIEngineSettings,
+    AuthSettings,
+    DFATSettings,
+    LoggingSettings,
+    load_settings,
+)
 
 
 def _audit_log_path(settings: DFATSettings) -> Path:
@@ -69,6 +95,51 @@ def _output_dir(settings: DFATSettings) -> Path:
 def _logging_settings(settings: DFATSettings) -> LoggingSettings:
     """Extract nested logging settings."""
     return settings.logging
+
+
+def _database_url(settings: DFATSettings) -> str:
+    """Extract database URL from settings."""
+    return settings.database.url
+
+
+def _database_echo(settings: DFATSettings) -> bool:
+    """Extract database SQL echo flag from settings."""
+    return settings.database.echo
+
+
+def _database_pool_size(settings: DFATSettings) -> int:
+    """Extract database pool size from settings."""
+    return settings.database.pool_size
+
+
+def _database_max_overflow(settings: DFATSettings) -> int:
+    """Extract database max overflow from settings."""
+    return settings.database.max_overflow
+
+
+def _auth_secret_key(settings: DFATSettings) -> str:
+    """Extract JWT secret key from settings."""
+    return settings.auth.secret_key
+
+
+def _auth_algorithm(settings: DFATSettings) -> str:
+    """Extract JWT algorithm from settings."""
+    return settings.auth.algorithm
+
+
+def _auth_access_expire(settings: DFATSettings) -> int:
+    """Extract access-token expiry minutes from settings."""
+    return settings.auth.access_token_expire_minutes
+
+
+def _auth_settings(settings: DFATSettings) -> AuthSettings:
+    """Extract nested authentication settings."""
+    return settings.auth
+
+
+def _auth_refresh_expire(settings: DFATSettings) -> int:
+    """Extract refresh-token expiry days from settings."""
+    return settings.auth.refresh_token_expire_days
 
 
 class LoggingContainer(containers.DeclarativeContainer):
@@ -104,22 +175,58 @@ class StorageContainer(containers.DeclarativeContainer):
 
 
 class RepositoryContainer(containers.DeclarativeContainer):
-    """Persistence repository providers."""
+    """Persistence repository providers (file fallbacks + SQLAlchemy)."""
 
     local_storage = providers.Dependency(instance_of=LocalFileStorage)
     secure_storage = providers.Dependency(instance_of=SecureStorage)
+    session_factory = providers.Dependency()
 
-    evidence_repo = providers.Singleton(
+    # File-based fallbacks (sync pipeline / offline testing).
+    file_evidence_repo = providers.Singleton(
         FileSystemEvidenceRepository,
         storage=local_storage,
     )
-    artefact_repo = providers.Singleton(
+    file_artefact_repo = providers.Singleton(
         JSONArtefactRepository,
         storage=local_storage,
     )
-    report_repo = providers.Singleton(
+    file_report_repo = providers.Singleton(
         FileSystemReportRepository,
         storage=secure_storage,
+    )
+
+    # Primary SQLAlchemy-backed repositories (async).
+    evidence_repo = providers.Singleton(
+        SQLAlchemyEvidenceRepository,
+        session_factory=session_factory,
+    )
+    artefact_repo = providers.Singleton(
+        SQLAlchemyArtefactRepository,
+        session_factory=session_factory,
+    )
+    report_repo = providers.Singleton(
+        SQLAlchemyReportRepository,
+        session_factory=session_factory,
+    )
+    user_repo = providers.Singleton(
+        SQLAlchemyUserRepository,
+        session_factory=session_factory,
+    )
+    session_repo = providers.Singleton(
+        SessionRepository,
+        session_factory=session_factory,
+    )
+    audit_repo = providers.Singleton(
+        SQLAlchemyAuditRepository,
+        session_factory=session_factory,
+    )
+    benchmark_repo = providers.Singleton(
+        SQLAlchemyBenchmarkRepository,
+        session_factory=session_factory,
+    )
+    usability_repo = providers.Singleton(
+        SQLAlchemyUsabilityRepository,
+        session_factory=session_factory,
     )
 
 
@@ -364,6 +471,110 @@ class PipelineContainer(containers.DeclarativeContainer):
     )
 
 
+class DatabaseContainer(containers.DeclarativeContainer):
+    """Async SQLAlchemy persistence providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+
+    database_engine = providers.Singleton(
+        DatabaseEngine,
+        database_url=providers.Callable(_database_url, settings),
+        echo=providers.Callable(_database_echo, settings),
+        pool_size=providers.Callable(_database_pool_size, settings),
+        max_overflow=providers.Callable(_database_max_overflow, settings),
+    )
+    session_factory = providers.Callable(
+        lambda engine: engine.session_factory,
+        database_engine,
+    )
+
+
+class AuthContainer(containers.DeclarativeContainer):
+    """Authentication primitive providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+
+    password_hasher = providers.Singleton(PasswordHasher)
+    jwt_handler = providers.Singleton(
+        JWTHandler,
+        secret_key=providers.Callable(_auth_secret_key, settings),
+        algorithm=providers.Callable(_auth_algorithm, settings),
+        access_token_expire_minutes=providers.Callable(_auth_access_expire, settings),
+        refresh_token_expire_days=providers.Callable(_auth_refresh_expire, settings),
+    )
+    permission_checker = providers.Singleton(PermissionChecker)
+
+
+class ServicesContainer(containers.DeclarativeContainer):
+    """Application service-layer providers (business logic)."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    user_repo = providers.Dependency(instance_of=SQLAlchemyUserRepository)
+    session_repo = providers.Dependency(instance_of=SessionRepository)
+    audit_repo = providers.Dependency(instance_of=SQLAlchemyAuditRepository)
+    evidence_repo = providers.Dependency(instance_of=SQLAlchemyEvidenceRepository)
+    artefact_repo = providers.Dependency(instance_of=SQLAlchemyArtefactRepository)
+    report_repo = providers.Dependency(instance_of=SQLAlchemyReportRepository)
+    benchmark_repo = providers.Dependency(instance_of=SQLAlchemyBenchmarkRepository)
+    usability_repo = providers.Dependency(instance_of=SQLAlchemyUsabilityRepository)
+    password_hasher = providers.Dependency(instance_of=PasswordHasher)
+    jwt_handler = providers.Dependency(instance_of=JWTHandler)
+    integrity_checker = providers.Dependency(instance_of=IntegrityChecker)
+    disk_handler = providers.Dependency(instance_of=DiskImageHandler)
+    memory_handler = providers.Dependency(instance_of=MemoryDumpHandler)
+    local_storage = providers.Dependency(instance_of=LocalFileStorage)
+    pipeline_orchestrator = providers.Dependency(instance_of=PipelineOrchestrator)
+    benchmark_comparator = providers.Dependency(instance_of=BenchmarkComparator)
+    ground_truth_loader = providers.Dependency(instance_of=GroundTruthLoader)
+    forensic_audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+
+    user_service = providers.Factory(
+        UserService,
+        user_repo=user_repo,
+        session_repo=session_repo,
+        password_hasher=password_hasher,
+        jwt_handler=jwt_handler,
+        audit_repo=audit_repo,
+        auth_settings=providers.Callable(_auth_settings, settings),
+    )
+    evidence_service = providers.Factory(
+        EvidenceService,
+        evidence_repo=evidence_repo,
+        integrity_checker=integrity_checker,
+        disk_handler=disk_handler,
+        memory_handler=memory_handler,
+        audit_repo=audit_repo,
+        storage=local_storage,
+    )
+    analysis_service = providers.Factory(
+        AnalysisService,
+        pipeline_orchestrator=pipeline_orchestrator,
+        evidence_repo=evidence_repo,
+        artefact_repo=artefact_repo,
+        report_repo=report_repo,
+        audit_repo=audit_repo,
+        integrity_checker=integrity_checker,
+    )
+    report_service = providers.Factory(
+        ReportService,
+        report_repo=report_repo,
+        audit_repo=audit_repo,
+    )
+    evaluation_service = providers.Factory(
+        EvaluationService,
+        benchmark_repo=benchmark_repo,
+        usability_repo=usability_repo,
+        benchmark_comparator=benchmark_comparator,
+        ground_truth_loader=ground_truth_loader,
+        audit_repo=audit_repo,
+    )
+    audit_service = providers.Factory(
+        AuditService,
+        audit_repo=audit_repo,
+        forensic_audit_logger=forensic_audit_logger,
+    )
+
+
 class ApplicationContainer(containers.DeclarativeContainer):
     """Root application DI container with nested engine sub-containers."""
 
@@ -372,11 +583,14 @@ class ApplicationContainer(containers.DeclarativeContainer):
 
     logging = providers.Container(LoggingContainer, settings=settings)
     storage = providers.Container(StorageContainer, settings=settings)
+    database = providers.Container(DatabaseContainer, settings=settings)
     repositories = providers.Container(
         RepositoryContainer,
         local_storage=storage.local_storage,
         secure_storage=storage.secure_storage,
+        session_factory=database.session_factory,
     )
+    auth = providers.Container(AuthContainer, settings=settings)
     cache = providers.Container(CacheContainer)
     forensic_engine = providers.Container(
         ForensicEngineContainer,
@@ -393,7 +607,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         ReportingEngineContainer,
         settings=settings,
         audit_logger=logging.forensic_audit_logger,
-        report_repo=repositories.report_repo,
+        report_repo=repositories.file_report_repo,
     )
     evaluation_engine = providers.Container(
         EvaluationEngineContainer,
@@ -406,9 +620,32 @@ class ApplicationContainer(containers.DeclarativeContainer):
         analyzer=ai_engine.active_analyzer,
         fallback_analyzer=ai_engine.fallback,
         report_builder=reporting_engine.report_builder,
-        evidence_repo=repositories.evidence_repo,
-        report_repo=repositories.report_repo,
+        evidence_repo=repositories.file_evidence_repo,
+        report_repo=repositories.file_report_repo,
         ground_truth_loader=evaluation_engine.ground_truth_loader,
         benchmark_comparator=evaluation_engine.comparator,
         audit_logger=logging.forensic_audit_logger,
+    )
+
+    services = providers.Container(
+        ServicesContainer,
+        settings=settings,
+        user_repo=repositories.user_repo,
+        session_repo=repositories.session_repo,
+        audit_repo=repositories.audit_repo,
+        evidence_repo=repositories.evidence_repo,
+        artefact_repo=repositories.artefact_repo,
+        report_repo=repositories.report_repo,
+        benchmark_repo=repositories.benchmark_repo,
+        usability_repo=repositories.usability_repo,
+        password_hasher=auth.password_hasher,
+        jwt_handler=auth.jwt_handler,
+        integrity_checker=forensic_engine.integrity_checker,
+        disk_handler=forensic_engine.image_handler,
+        memory_handler=forensic_engine.memory_handler,
+        local_storage=storage.local_storage,
+        pipeline_orchestrator=pipeline.pipeline_orchestrator,
+        benchmark_comparator=evaluation_engine.comparator,
+        ground_truth_loader=evaluation_engine.ground_truth_loader,
+        forensic_audit_logger=logging.forensic_audit_logger,
     )

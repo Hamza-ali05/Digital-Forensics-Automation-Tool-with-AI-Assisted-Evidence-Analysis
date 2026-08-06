@@ -10,3 +10,6 @@ DFAT ADRs capture research-oriented design choices for the DSR artefact.
 | [ADR-004](ADR-004-file-based-repositories.md) | Repository Pattern with File-Based Storage |
 | [ADR-005](ADR-005-graceful-forensic-deps.md) | Graceful Degradation on Library Absence |
 | [ADR-006](ADR-006-rule-based-fallback.md) | Rule-Based Fallback Analyzer |
+| [ADR-007](ADR-007-sqlalchemy-async-persistence.md) | SQLAlchemy Async Persistence |
+| [ADR-008](ADR-008-jwt-rbac.md) | JWT Authentication with RBAC |
+| [ADR-009](ADR-009-service-layer.md) | Service Layer Pattern |

@@ -1,5 +1,13 @@
-"""DFAT API Routes — HTTP endpoints for evidence, analysis, reports, and evaluation."""
+"""DFAT API Routes — HTTP endpoints for auth, health, evidence, and analysis."""
 
-from dfat.api.routes import analysis, evaluation, evidence, reports
+from dfat.api.routes import analysis, auth, evaluation, evidence, health, reports, users
 
-__all__ = ["analysis", "evaluation", "evidence", "reports"]
+__all__ = [
+    "analysis",
+    "auth",
+    "evaluation",
+    "evidence",
+    "health",
+    "reports",
+    "users",
+]

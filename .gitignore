@@ -55,5 +55,10 @@ data/questionnaire/responses/*
 *.key
 credentials.json
 
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+
 # Scaffold temp
 _prompt1_scaffold.py

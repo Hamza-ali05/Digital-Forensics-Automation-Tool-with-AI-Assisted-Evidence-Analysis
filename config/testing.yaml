@@ -10,3 +10,12 @@ ai_engine:
   request_timeout_seconds: 5
 evaluation:
   ground_truth_dir: ./tests/fixtures/ground_truth
+database:
+  url: "sqlite+aiosqlite:///./.pytest_tmp/dfat_test.db"
+  echo: false
+  create_tables_on_startup: true
+auth:
+  secret_key: "test-secret-key-not-for-production"
+  access_token_expire_minutes: 5
+  max_login_attempts: 5
+  lockout_duration_minutes: 30

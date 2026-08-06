@@ -3,27 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, status
 
-from dfat.api.dependencies import (
-    get_disk_image_handler,
-    get_evidence_repository,
-    get_memory_dump_handler,
-)
+from dfat.api.dependencies import get_evidence_service, require_permission
 from dfat.api.schemas.requests import EvidenceUploadRequest
 from dfat.api.schemas.responses import EvidenceResponse
-from dfat.core.enums import EvidenceType
-from dfat.core.exceptions import EvidenceNotFoundError
-from dfat.core.models.evidence import CaseMetadata
-from dfat.forensic_engine.acquisition.image_handler import DiskImageHandler
-from dfat.forensic_engine.acquisition.memory_handler import MemoryDumpHandler
-from dfat.infrastructure.repositories.evidence_repo import FileSystemEvidenceRepository
+from dfat.core.models.evidence import EvidenceImage
+from dfat.database.models.user import UserORM
+from dfat.services.evidence_service import EvidenceService
 
-router = APIRouter(prefix="/evidence", tags=["evidence"])
+router = APIRouter(prefix="/evidence", tags=["Evidence"])
 
 
-def _to_response(evidence) -> EvidenceResponse:  # type: ignore[no-untyped-def]
+def _to_response(
+    evidence: EvidenceImage,
+    *,
+    registered_by: Optional[str] = None,
+) -> EvidenceResponse:
     """Map an EvidenceImage/MemoryDump to an EvidenceResponse."""
     return EvidenceResponse(
         evidence_id=evidence.evidence_id,
@@ -31,6 +29,7 @@ def _to_response(evidence) -> EvidenceResponse:  # type: ignore[no-untyped-def]
         evidence_type=evidence.evidence_type,
         original_hash=evidence.original_hash,
         case=evidence.case.model_dump(mode="json"),
+        registered_by=registered_by,
     )
 
 
@@ -39,45 +38,39 @@ def _to_response(evidence) -> EvidenceResponse:  # type: ignore[no-untyped-def]
     response_model=EvidenceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def register_evidence(
+async def register_evidence(
     body: EvidenceUploadRequest,
-    evidence_repo: FileSystemEvidenceRepository = Depends(get_evidence_repository),
-    disk_handler: DiskImageHandler = Depends(get_disk_image_handler),
-    memory_handler: MemoryDumpHandler = Depends(get_memory_dump_handler),
+    current_user: UserORM = Depends(require_permission("evidence", "create")),
+    evidence_service: EvidenceService = Depends(get_evidence_service),
 ) -> EvidenceResponse:
     """Register evidence for analysis."""
-    case = CaseMetadata(
+    evidence = await evidence_service.register_evidence(
+        file_path=Path(body.file_path),
         case_name=body.case_name,
         investigator=body.investigator,
+        evidence_type=body.evidence_type,
         description=body.description,
+        user_id=current_user.id,
     )
-    path = Path(body.file_path)
-    if body.evidence_type == EvidenceType.MEMORY_DUMP:
-        evidence = memory_handler.load_dump(path, case)
-    else:
-        evidence = disk_handler.load_image(path, case)
-    evidence_repo.save(evidence)
-    return _to_response(evidence)
+    return _to_response(evidence, registered_by=current_user.id)
 
 
 @router.get("/{evidence_id}", response_model=EvidenceResponse)
-def get_evidence(
+async def get_evidence(
     evidence_id: str,
-    evidence_repo: FileSystemEvidenceRepository = Depends(get_evidence_repository),
+    _: UserORM = Depends(require_permission("evidence", "read")),
+    evidence_service: EvidenceService = Depends(get_evidence_service),
 ) -> EvidenceResponse:
     """Get evidence metadata by ID."""
-    evidence = evidence_repo.get(evidence_id)
-    if evidence is None:
-        raise EvidenceNotFoundError(
-            f"Evidence not found: {evidence_id}",
-            context={"evidence_id": evidence_id},
-        )
+    evidence = await evidence_service.get_evidence(evidence_id)
     return _to_response(evidence)
 
 
 @router.get("", response_model=list[EvidenceResponse])
-def list_evidence(
-    evidence_repo: FileSystemEvidenceRepository = Depends(get_evidence_repository),
+async def list_evidence(
+    _: UserORM = Depends(require_permission("evidence", "read")),
+    evidence_service: EvidenceService = Depends(get_evidence_service),
 ) -> list[EvidenceResponse]:
     """List all registered evidence."""
-    return [_to_response(item) for item in evidence_repo.list_all()]
+    items = await evidence_service.list_evidence()
+    return [_to_response(item) for item in items]

@@ -87,6 +87,40 @@ class SecuritySettings(BaseModel):
     primary_hash: HashAlgorithm = HashAlgorithm.SHA256
 
 
+class DatabaseSettings(BaseModel):
+    """Async SQLAlchemy database settings.
+
+    The database stores metadata, audit trails, users, and analysis results.
+    Raw forensic evidence files are never persisted here.
+    """
+
+    url: str = "sqlite+aiosqlite:///./data/dfat.db"
+    echo: bool = False
+    pool_size: int = 5
+    max_overflow: int = 10
+    create_tables_on_startup: bool = True
+
+
+class AuthSettings(BaseModel):
+    """Local JWT authentication and account lockout settings."""
+
+    secret_key: str = "CHANGE-ME-IN-PRODUCTION"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 7
+    password_min_length: int = 12
+    max_login_attempts: int = 5
+    lockout_duration_minutes: int = 30
+
+
+class ApiSettings(BaseModel):
+    """HTTP API surface settings (CORS, etc.)."""
+
+    cors_allow_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
+
 class DFATSettings(BaseSettings):
     """Top-level DFAT settings composed from YAML and environment variables.
 
@@ -111,6 +145,9 @@ class DFATSettings(BaseSettings):
     evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
+    api: ApiSettings = Field(default_factory=ApiSettings)
 
 
 def _load_yaml_file(path: Path) -> dict[str, Any]:

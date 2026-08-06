@@ -61,3 +61,26 @@ security:
     - sha256
     - md5
   primary_hash: sha256
+
+# Async SQLAlchemy persistence (metadata/audit/users only — no evidence blobs).
+database:
+  url: "sqlite+aiosqlite:///./data/dfat.db"
+  echo: false
+  pool_size: 5
+  max_overflow: 10
+  create_tables_on_startup: true
+
+# Local JWT authentication settings.
+auth:
+  secret_key: "CHANGE-ME-IN-PRODUCTION-USE-SECRETS"
+  algorithm: "HS256"
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 7
+  password_min_length: 12
+  max_login_attempts: 5
+  lockout_duration_minutes: 30
+
+# HTTP API settings.
+api:
+  cors_allow_origins:
+    - "http://localhost:3000"

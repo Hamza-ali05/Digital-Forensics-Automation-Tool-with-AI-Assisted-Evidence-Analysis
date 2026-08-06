@@ -3,22 +3,31 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 
-from dfat.core.enums import EvidenceType, HashAlgorithm
+from dfat.core.enums import EvidenceType, HashAlgorithm, PipelineStage
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
 from dfat.core.models.evaluation import BenchmarkResult
 from dfat.core.models.pipeline import PipelineState, StageResult
-from dfat.core.enums import PipelineStage
 from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
+
+
+def _auth(client: TestClient) -> dict[str, str]:
+    """Return Authorization headers for the seeded analyst token."""
+    return {"Authorization": f"Bearer {client.analyst_token}"}  # type: ignore[attr-defined]
+
+
+def _admin_auth(client: TestClient) -> dict[str, str]:
+    """Return Authorization headers for the seeded admin token."""
+    return {"Authorization": f"Bearer {client.admin_token}"}  # type: ignore[attr-defined]
 
 
 def test_list_evidence_returns_empty_list(app_client: TestClient) -> None:
     """Verify GET /api/v1/evidence returns an empty list initially."""
     # Arrange / Act
-    response = app_client.get("/api/v1/evidence")
+    response = app_client.get("/api/v1/evidence", headers=_auth(app_client))
 
     # Assert
     assert response.status_code == 200
@@ -44,14 +53,15 @@ def test_register_evidence_returns_201(
         case=sample_case_metadata,
     )
     container = app_client.app.state.container
-    handler = MagicMock()
-    handler.load_image.return_value = evidence
-    container.forensic_engine.image_handler.override(handler)
+    service = AsyncMock()
+    service.register_evidence = AsyncMock(return_value=evidence)
+    container.services.evidence_service.override(service)
 
     try:
         # Act
         response = app_client.post(
             "/api/v1/evidence",
+            headers=_admin_auth(app_client),
             json={
                 "file_path": str(evidence_file),
                 "case_name": sample_case_metadata.case_name,
@@ -67,17 +77,33 @@ def test_register_evidence_returns_201(
         assert body["evidence_id"] == "ev-api-1"
         assert body["evidence_type"] == "disk_image"
     finally:
-        container.forensic_engine.image_handler.reset_override()
+        container.services.evidence_service.reset_override()
 
 
 def test_get_evidence_returns_404_for_unknown_id(app_client: TestClient) -> None:
     """Verify GET /api/v1/evidence/{id} returns 404 for missing evidence."""
-    # Arrange / Act
-    response = app_client.get("/api/v1/evidence/does-not-exist")
+    # Arrange
+    from dfat.core.exceptions import EvidenceNotFoundError
 
-    # Assert
-    assert response.status_code == 404
-    assert response.json()["error_type"] == "EvidenceNotFoundError"
+    container = app_client.app.state.container
+    service = AsyncMock()
+    service.get_evidence = AsyncMock(
+        side_effect=EvidenceNotFoundError("Evidence not found: does-not-exist")
+    )
+    container.services.evidence_service.override(service)
+
+    try:
+        # Act
+        response = app_client.get(
+            "/api/v1/evidence/does-not-exist",
+            headers=_auth(app_client),
+        )
+
+        # Assert
+        assert response.status_code == 404
+        assert response.json()["error_type"] == "EvidenceNotFoundError"
+    finally:
+        container.services.evidence_service.reset_override()
 
 
 def test_run_analysis_returns_202(
@@ -86,27 +112,16 @@ def test_run_analysis_returns_202(
 ) -> None:
     """Verify POST /api/v1/analysis returns pipeline status with 202."""
     # Arrange
-    state = PipelineState(
-        case=sample_case_metadata,
-        current_stage=PipelineStage.PARSING,
-        stage_results={
-            "parsing": StageResult(
-                stage=PipelineStage.PARSING,
-                success=True,
-                duration_seconds=0.1,
-                output_data={"artefact_count": 0},
-            )
-        },
-    )
-    orchestrator = MagicMock()
-    orchestrator.start_pipeline.return_value = state
     container = app_client.app.state.container
-    container.pipeline.pipeline_orchestrator.override(orchestrator)
+    service = AsyncMock()
+    service.run_parse_only = AsyncMock(return_value=MagicMock())
+    container.services.analysis_service.override(service)
 
     try:
         # Act
         response = app_client.post(
             "/api/v1/analysis",
+            headers=_auth(app_client),
             json={
                 "evidence_id": "ev-api-1",
                 "mode": "parse-only",
@@ -117,37 +132,60 @@ def test_run_analysis_returns_202(
         # Assert
         assert response.status_code == 202
         body = response.json()
-        assert body["pipeline_id"] == state.pipeline_id
-        assert body["current_stage"] == "parsing"
+        assert "pipeline_id" in body
+        assert body["is_complete"] is True
     finally:
-        container.pipeline.pipeline_orchestrator.reset_override()
+        container.services.analysis_service.reset_override()
 
 
 def test_get_analysis_returns_404_for_unknown_pipeline(app_client: TestClient) -> None:
     """Verify GET /api/v1/analysis/{id} returns 404 when pipeline is missing."""
     # Arrange
-    orchestrator = MagicMock()
-    orchestrator.get_pipeline_state.return_value = None
+    from dfat.core.exceptions import EvidenceNotFoundError
+
     container = app_client.app.state.container
-    container.pipeline.pipeline_orchestrator.override(orchestrator)
+    service = AsyncMock()
+    service.get_analysis_status = AsyncMock(
+        side_effect=EvidenceNotFoundError("Pipeline not found")
+    )
+    container.services.analysis_service.override(service)
 
     try:
         # Act
-        response = app_client.get("/api/v1/analysis/missing-pipeline")
+        response = app_client.get(
+            "/api/v1/analysis/missing-pipeline",
+            headers=_auth(app_client),
+        )
 
         # Assert
         assert response.status_code == 404
     finally:
-        container.pipeline.pipeline_orchestrator.reset_override()
+        container.services.analysis_service.reset_override()
 
 
 def test_get_report_returns_404_for_unknown_report(app_client: TestClient) -> None:
     """Verify GET /api/v1/reports/{id} returns 404 for missing reports."""
-    # Arrange / Act
-    response = app_client.get("/api/v1/reports/missing-report")
+    # Arrange
+    from dfat.core.exceptions import EvidenceNotFoundError
 
-    # Assert
-    assert response.status_code == 404
+    container = app_client.app.state.container
+    service = AsyncMock()
+    service.get_report = AsyncMock(
+        side_effect=EvidenceNotFoundError("Report not found")
+    )
+    container.services.report_service.override(service)
+
+    try:
+        # Act
+        response = app_client.get(
+            "/api/v1/reports/missing-report",
+            headers=_auth(app_client),
+        )
+
+        # Assert
+        assert response.status_code == 404
+    finally:
+        container.services.report_service.reset_override()
 
 
 def test_get_report_json_and_narrative(
@@ -175,16 +213,24 @@ def test_get_report_json_and_narrative(
         pipeline_duration_seconds=1.5,
         stage_timings={},
     )
-    repo = MagicMock()
-    repo.get.return_value = report
     container = app_client.app.state.container
-    container.repositories.report_repo.override(repo)
+    service = AsyncMock()
+    service.get_report = AsyncMock(return_value=report)
+    service.get_json_report = AsyncMock(return_value=report.json_report)
+    service.get_narrative_report = AsyncMock(return_value=report.narrative_report)
+    container.services.report_service.override(service)
 
     try:
         # Act
-        summary = app_client.get("/api/v1/reports/rep-1")
-        json_resp = app_client.get("/api/v1/reports/rep-1/json")
-        narrative = app_client.get("/api/v1/reports/rep-1/narrative")
+        summary = app_client.get("/api/v1/reports/rep-1", headers=_auth(app_client))
+        json_resp = app_client.get(
+            "/api/v1/reports/rep-1/json",
+            headers=_auth(app_client),
+        )
+        narrative = app_client.get(
+            "/api/v1/reports/rep-1/narrative",
+            headers=_auth(app_client),
+        )
 
         # Assert
         assert summary.status_code == 200
@@ -194,7 +240,7 @@ def test_get_report_json_and_narrative(
         assert narrative.status_code == 200
         assert narrative.text == "Narrative body"
     finally:
-        container.repositories.report_repo.reset_override()
+        container.services.report_service.reset_override()
 
 
 def test_evaluation_benchmark_and_results_list(app_client: TestClient) -> None:
@@ -222,13 +268,17 @@ def test_evaluation_benchmark_and_results_list(app_client: TestClient) -> None:
         # Act
         created = app_client.post(
             "/api/v1/evaluation/benchmark",
+            headers=_admin_auth(app_client),
             json={
                 "evidence_id": "ev-1",
                 "ground_truth_path": "/tmp/gt.json",
                 "dataset_name": "sample",
             },
         )
-        listed = app_client.get("/api/v1/evaluation/results")
+        listed = app_client.get(
+            "/api/v1/evaluation/results",
+            headers=_auth(app_client),
+        )
 
         # Assert
         assert created.status_code == 200
@@ -244,6 +294,7 @@ def test_analysis_rejects_invalid_mode(app_client: TestClient) -> None:
     # Arrange / Act
     response = app_client.post(
         "/api/v1/analysis",
+        headers=_auth(app_client),
         json={"evidence_id": "ev-1", "mode": "invalid-mode"},
     )
 

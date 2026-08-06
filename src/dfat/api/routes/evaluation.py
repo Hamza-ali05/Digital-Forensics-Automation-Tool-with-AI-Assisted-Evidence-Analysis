@@ -6,13 +6,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, status
 
-from dfat.api.dependencies import get_forensic_orchestrator
+from dfat.api.dependencies import get_forensic_orchestrator, require_permission
 from dfat.api.schemas.requests import BenchmarkRunRequest
 from dfat.api.schemas.responses import BenchmarkResponse
 from dfat.core.models.evaluation import BenchmarkResult
+from dfat.database.models.user import UserORM
 from dfat.pipeline import PipelineOrchestrator
 
-router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+router = APIRouter(prefix="/evaluation", tags=["Evaluation"])
 
 
 def _to_benchmark(result: BenchmarkResult) -> BenchmarkResponse:
@@ -33,8 +34,9 @@ def _to_benchmark(result: BenchmarkResult) -> BenchmarkResponse:
     response_model=BenchmarkResponse,
     status_code=status.HTTP_200_OK,
 )
-def run_benchmark(
+async def run_benchmark(
     body: BenchmarkRunRequest,
+    _: UserORM = Depends(require_permission("evaluation", "create")),
     orchestrator: PipelineOrchestrator = Depends(get_forensic_orchestrator),
 ) -> BenchmarkResponse:
     """Run benchmark comparison against ground truth."""
@@ -47,7 +49,8 @@ def run_benchmark(
 
 
 @router.get("/results", response_model=list[BenchmarkResponse])
-def list_benchmark_results(
+async def list_benchmark_results(
+    _: UserORM = Depends(require_permission("evaluation", "read")),
     orchestrator: PipelineOrchestrator = Depends(get_forensic_orchestrator),
 ) -> list[BenchmarkResponse]:
     """List all stored benchmark results."""

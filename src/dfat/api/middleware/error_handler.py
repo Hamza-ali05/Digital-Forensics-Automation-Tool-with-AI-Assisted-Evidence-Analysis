@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from dfat.api.exceptions import RateLimitExceededError
 from dfat.api.schemas.responses import ErrorResponse
+from dfat.auth.exceptions import (
+    AccountDisabledError,
+    AccountLockedError,
+    AuthenticationError,
+    AuthorisationError,
+    InsufficientPermissionsError,
+    InvalidCredentialsError,
+    TokenExpiredError,
+    TokenRevokedError,
+)
 from dfat.core.exceptions import (
     AIEngineError,
     DFATError,
@@ -20,6 +32,12 @@ from dfat.core.exceptions import (
     ReportingError,
     UnsupportedFormatError,
 )
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+def _request_id(request: Request) -> Optional[str]:
+    """Extract request ID from request state when present."""
+    return getattr(request.state, "request_id", None)
 
 
 class GlobalExceptionHandler:
@@ -38,56 +56,113 @@ class GlobalExceptionHandler:
             request: Request,
             exc: EvidenceNotFoundError,
         ) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 404)
+            return GlobalExceptionHandler._error_response(request, exc, 404)
 
         @app.exception_handler(IntegrityVerificationError)
         async def _integrity(
             request: Request,
             exc: IntegrityVerificationError,
         ) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 409)
+            return GlobalExceptionHandler._error_response(request, exc, 409)
 
         @app.exception_handler(UnsupportedFormatError)
         async def _unsupported(
             request: Request,
             exc: UnsupportedFormatError,
         ) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 400)
+            return GlobalExceptionHandler._error_response(request, exc, 400)
 
         @app.exception_handler(ParsingError)
         async def _parsing(request: Request, exc: ParsingError) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 422)
+            return GlobalExceptionHandler._error_response(request, exc, 422)
 
         @app.exception_handler(AIEngineError)
         async def _ai(request: Request, exc: AIEngineError) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 503)
+            return GlobalExceptionHandler._error_response(request, exc, 503)
 
         @app.exception_handler(ReportingError)
         async def _reporting(request: Request, exc: ReportingError) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 500)
+            return GlobalExceptionHandler._error_response(request, exc, 500)
 
         @app.exception_handler(EvaluationError)
         async def _evaluation(request: Request, exc: EvaluationError) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 500)
+            return GlobalExceptionHandler._error_response(request, exc, 500)
+
+        @app.exception_handler(InvalidCredentialsError)
+        async def _invalid_credentials(
+            request: Request,
+            exc: InvalidCredentialsError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 401)
+
+        @app.exception_handler(TokenExpiredError)
+        async def _token_expired(
+            request: Request,
+            exc: TokenExpiredError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 401)
+
+        @app.exception_handler(TokenRevokedError)
+        async def _token_revoked(
+            request: Request,
+            exc: TokenRevokedError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 401)
+
+        @app.exception_handler(AccountLockedError)
+        async def _account_locked(
+            request: Request,
+            exc: AccountLockedError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 423)
+
+        @app.exception_handler(AccountDisabledError)
+        async def _account_disabled(
+            request: Request,
+            exc: AccountDisabledError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 403)
+
+        @app.exception_handler(InsufficientPermissionsError)
+        async def _insufficient_permissions(
+            request: Request,
+            exc: InsufficientPermissionsError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 403)
+
+        @app.exception_handler(AuthorisationError)
+        async def _authorisation(
+            request: Request,
+            exc: AuthorisationError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 403)
+
+        @app.exception_handler(AuthenticationError)
+        async def _authentication(
+            request: Request,
+            exc: AuthenticationError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 401)
+
+        @app.exception_handler(RateLimitExceededError)
+        async def _rate_limit(
+            request: Request,
+            exc: RateLimitExceededError,
+        ) -> JSONResponse:
+            retry_after = int(exc.retry_after_seconds)
+            response = GlobalExceptionHandler._error_response(request, exc, 429)
+            response.headers["Retry-After"] = str(retry_after)
+            return response
 
         @app.exception_handler(DFATError)
         async def _dfat(request: Request, exc: DFATError) -> JSONResponse:
-            _ = request
-            return GlobalExceptionHandler._error_response(exc, 400)
+            return GlobalExceptionHandler._error_response(request, exc, 400)
 
         @app.exception_handler(RequestValidationError)
         async def _request_validation(
             request: Request,
             exc: RequestValidationError,
         ) -> JSONResponse:
-            _ = request
             return JSONResponse(
                 status_code=422,
                 content=ErrorResponse(
@@ -95,6 +170,7 @@ class GlobalExceptionHandler:
                     message="Request validation failed",
                     timestamp=datetime.now(UTC),
                     details={"errors": exc.errors()},
+                    request_id=_request_id(request),
                 ).model_dump(mode="json"),
             )
 
@@ -103,7 +179,6 @@ class GlobalExceptionHandler:
             request: Request,
             exc: ValidationError,
         ) -> JSONResponse:
-            _ = request
             return JSONResponse(
                 status_code=422,
                 content=ErrorResponse(
@@ -111,13 +186,18 @@ class GlobalExceptionHandler:
                     message="Validation failed",
                     timestamp=datetime.now(UTC),
                     details={"errors": exc.errors()},
+                    request_id=_request_id(request),
                 ).model_dump(mode="json"),
             )
 
         @app.exception_handler(Exception)
         async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-            _ = request
-            _ = exc
+            if isinstance(exc, StarletteHTTPException):
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=dict(exc.headers) if exc.headers else None,
+                )
             return JSONResponse(
                 status_code=500,
                 content=ErrorResponse(
@@ -125,19 +205,30 @@ class GlobalExceptionHandler:
                     message="Internal server error",
                     timestamp=datetime.now(UTC),
                     details={},
+                    request_id=_request_id(request),
                 ).model_dump(mode="json"),
             )
 
     @staticmethod
-    def _error_response(exc: DFATError, status_code: int) -> JSONResponse:
-        """Build an ``ErrorResponse`` JSON payload."""
+    def _error_response(
+        request: Request,
+        exc: DFATError,
+        status_code: int,
+        *,
+        extra_details: Optional[dict[str, Any]] = None,
+    ) -> JSONResponse:
+        """Build an ``ErrorResponse`` JSON payload including request ID."""
+        details = dict(exc.context)
+        if extra_details:
+            details.update(extra_details)
         return JSONResponse(
             status_code=status_code,
             content=ErrorResponse(
                 error_type=type(exc).__name__,
                 message=exc.message,
                 timestamp=exc.timestamp,
-                details=dict(exc.context),
+                details=details,
+                request_id=_request_id(request),
             ).model_dump(mode="json"),
         )
 
