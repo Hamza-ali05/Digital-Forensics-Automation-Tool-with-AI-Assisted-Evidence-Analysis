@@ -50,7 +50,7 @@ class RegistryParser(BaseParser):
         """
         self._log_parse_start(evidence.evidence_id)
         try:
-            from Registry import Registry  # type: ignore[import-untyped]
+            from Registry import Registry
         except ImportError as exc:
             raise ImportError(
                 "python-registry is required for registry parsing. Install with: "

@@ -1,0 +1,37 @@
+[
+  {
+    "url": "https://www.example.com/",
+    "title": "Example Domain",
+    "visit_count": 3,
+    "last_visit": "2024-01-08T09:00:00Z",
+    "browser": "chrome"
+  },
+  {
+    "url": "http://malicious.example/payload",
+    "title": "Download",
+    "visit_count": 1,
+    "last_visit": "2024-01-09T14:20:00Z",
+    "browser": "chrome"
+  },
+  {
+    "url": "https://mail.example.com/inbox",
+    "title": "Inbox",
+    "visit_count": 12,
+    "last_visit": "2024-01-09T13:00:00Z",
+    "browser": "chrome"
+  },
+  {
+    "url": "http://c2.example/beacon",
+    "title": "404 Not Found",
+    "visit_count": 5,
+    "last_visit": "2024-01-09T15:10:00Z",
+    "browser": "firefox"
+  },
+  {
+    "url": "https://docs.example.com/guide",
+    "title": "User Guide",
+    "visit_count": 2,
+    "last_visit": "2024-01-07T11:00:00Z",
+    "browser": "edge"
+  }
+]

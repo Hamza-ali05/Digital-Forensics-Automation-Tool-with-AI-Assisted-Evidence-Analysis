@@ -23,6 +23,7 @@ dependencies = [
     "aiofiles>=23.0",
     "httpx>=0.24",
     "python-multipart>=0.0.6",
+    "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +46,7 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.5",
     "types-PyYAML>=6.0",
+    "types-jsonschema>=4.20",
     "pre-commit>=3.4",
 ]
 
@@ -76,7 +78,6 @@ module = [
     "pytsk3",
     "Registry",
     "Registry.*",
-    "Evtx",
     "Evtx.*",
     "volatility3",
     "volatility3.*",

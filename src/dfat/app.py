@@ -5,9 +5,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import FastAPI
 
 from dfat import __version__
+from dfat.api.middleware.audit import AuditTrailMiddleware
+from dfat.api.middleware.error_handler import GlobalExceptionHandler
+from dfat.api.middleware.validation import RequestValidationMiddleware
+from dfat.api.routes import analysis, evaluation, evidence, reports
 from dfat.container import ApplicationContainer
 
 
@@ -21,10 +25,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     Yields:
         Control to the running application.
     """
-    # TODO: Wire startup initialisation in later prompts.
-    _ = app
+    container: ApplicationContainer = app.state.container
+    container.logging.setup_app_logging()
     yield
-    # TODO: Wire shutdown cleanup in later prompts.
 
 
 def create_app() -> FastAPI:
@@ -46,15 +49,16 @@ def create_app() -> FastAPI:
     )
     app.state.container = container
 
-    # Placeholder routers — concrete routes are added in later prompts.
-    evidence_router = APIRouter(prefix="/evidence", tags=["evidence"])
-    analysis_router = APIRouter(prefix="/analysis", tags=["analysis"])
-    reports_router = APIRouter(prefix="/reports", tags=["reports"])
-    evaluation_router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+    GlobalExceptionHandler.register(app)
 
-    app.include_router(evidence_router)
-    app.include_router(analysis_router)
-    app.include_router(reports_router)
-    app.include_router(evaluation_router)
+    audit_logger = container.logging.forensic_audit_logger()
+    app.add_middleware(RequestValidationMiddleware)
+    app.add_middleware(AuditTrailMiddleware, audit_logger=audit_logger)
+
+    api_prefix = "/api/v1"
+    app.include_router(evidence.router, prefix=api_prefix)
+    app.include_router(analysis.router, prefix=api_prefix)
+    app.include_router(reports.router, prefix=api_prefix)
+    app.include_router(evaluation.router, prefix=api_prefix)
 
     return app

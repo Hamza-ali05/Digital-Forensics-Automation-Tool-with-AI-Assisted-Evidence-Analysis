@@ -1,0 +1,65 @@
+{# DFAT Narrative Report Template — supplementary investigative aid #}
+# Investigative Summary — {{ case_name }}
+
+**Generated:** {{ generated_at }}
+**Evidence ID:** {{ evidence_id }}
+**Report ID:** {{ report_id }}
+
+---
+
+## LLM Disclaimer
+
+{{ disclaimer }}
+
+---
+
+## Executive Summary
+
+{{ executive_summary }}
+
+---
+
+## Detailed Findings by Category
+
+{% for category, items in findings_by_category.items() %}
+### {{ category }}
+
+{% for item in items %}
+- **[{{ item.suspicion_level }} | {{ '%.2f'|format(item.relevance_score) }}]** {{ item.source_path or item.artefact_id }}
+  {% if item.classification_reasoning %}_{{ item.classification_reasoning }}_{% endif %}
+{% endfor %}
+
+{% else %}
+_No ranked findings available._
+{% endfor %}
+
+---
+
+## Timeline
+
+{% if timeline %}
+{% for event in timeline %}
+- {{ event }}
+{% endfor %}
+{% else %}
+_Insufficient temporal data to construct a reliable timeline._
+{% endif %}
+
+---
+
+## Statistics Appendix
+
+{{ statistics_appendix }}
+
+---
+
+## Report Metadata
+
+| Field | Value |
+|-------|-------|
+| LLM model | {{ llm_model }} |
+| Generation parameters | {{ generation_params }} |
+| Generation time (UTC) | {{ generated_at }} |
+| Artefact count | {{ artefact_count }} |
+
+*Structured JSON remains the authoritative evidential record. This narrative is advisory only.*

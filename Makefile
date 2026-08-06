@@ -1,4 +1,4 @@
-.PHONY: install install-dev install-forensic test test-cov lint format type-check clean run-api run-pipeline all
+.PHONY: install install-dev install-forensic test test-unit test-integration test-all test-cov lint format type-check clean run-api run-pipeline all
 
 install:
 	pip install -e .
@@ -11,6 +11,15 @@ install-forensic:
 
 test:
 	pytest
+
+test-unit:
+	pytest tests/unit/ -v
+
+test-integration:
+	pytest tests/integration/ -v
+
+test-all:
+	pytest tests/ -v
 
 test-cov:
 	pytest --cov=dfat --cov-report=term-missing --cov-report=html

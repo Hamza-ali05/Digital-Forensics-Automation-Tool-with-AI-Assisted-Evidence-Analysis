@@ -1,0 +1,37 @@
+[
+  {
+    "pid": 4,
+    "name": "System",
+    "ppid": 0,
+    "path": "",
+    "create_time": "2024-01-09T08:00:00Z"
+  },
+  {
+    "pid": 648,
+    "name": "csrss.exe",
+    "ppid": 560,
+    "path": "C:\\Windows\\System32\\csrss.exe",
+    "create_time": "2024-01-09T08:00:01Z"
+  },
+  {
+    "pid": 1337,
+    "name": "mimikatz.exe",
+    "ppid": 4200,
+    "path": "C:\\Users\\victim\\Downloads\\mimikatz.exe",
+    "create_time": "2024-01-09T14:50:00Z"
+  },
+  {
+    "pid": 2204,
+    "name": "powershell.exe",
+    "ppid": 1337,
+    "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "create_time": "2024-01-09T14:51:00Z"
+  },
+  {
+    "pid": 3012,
+    "name": "chrome.exe",
+    "ppid": 2800,
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "create_time": "2024-01-09T09:00:00Z"
+  }
+]

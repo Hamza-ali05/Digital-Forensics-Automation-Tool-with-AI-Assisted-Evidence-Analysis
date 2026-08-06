@@ -49,7 +49,7 @@ class EventLogParser(BaseParser):
         """
         self._log_parse_start(evidence.evidence_id)
         try:
-            from Evtx.Evtx import Evtx  # type: ignore[import-untyped]
+            from Evtx.Evtx import Evtx
         except ImportError as exc:
             raise ImportError(
                 "python-evtx is required for event log parsing. Install with: "

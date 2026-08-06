@@ -44,6 +44,10 @@ evaluation:
   ground_truth_dir: ./data/ground_truth
   dfrws_dataset_path: null
   cfreds_dataset_path: null
+  metrics_thresholds:
+    precision_min: 0.0
+    recall_min: 0.0
+    f1_min: 0.0
 
 # Application structured logging and forensic audit trail.
 logging:

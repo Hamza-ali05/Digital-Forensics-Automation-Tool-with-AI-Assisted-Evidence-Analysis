@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dfat.local/schemas/artefact_report.schema.json",
+  "title": "DFATArtefactReport",
+  "description": "Structured JSON artefact output layer (schema_version 1.0.0). Primary evidential record.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_id",
+    "evidence_id",
+    "case_metadata",
+    "generated_at",
+    "integrity_hash",
+    "pipeline_stage_timings",
+    "artefacts",
+    "summary_statistics"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "report_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_metadata": {
+      "type": "object",
+      "required": ["case_id", "case_name", "investigator"],
+      "additionalProperties": false,
+      "properties": {
+        "case_id": { "type": "string" },
+        "case_name": { "type": "string" },
+        "investigator": { "type": "string" }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "integrity_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "pipeline_stage_timings": {
+      "type": "object",
+      "required": ["acquisition_s", "parsing_s", "triage_s", "reporting_s"],
+      "additionalProperties": false,
+      "properties": {
+        "acquisition_s": { "type": "number" },
+        "parsing_s": { "type": "number" },
+        "triage_s": { "type": "number" },
+        "reporting_s": { "type": "number" }
+      }
+    },
+    "artefacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "artefact_id",
+          "category",
+          "source_path",
+          "suspicion_level",
+          "relevance_score",
+          "raw_data",
+          "classification_reasoning"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "artefact_id": { "type": "string" },
+          "category": { "type": "string" },
+          "source_path": { "type": ["string", "null"] },
+          "suspicion_level": { "type": "string" },
+          "relevance_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "raw_data": { "type": "object" },
+          "classification_reasoning": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "summary_statistics": {
+      "type": "object",
+      "required": ["total_artefacts", "by_category", "by_suspicion_level"],
+      "additionalProperties": false,
+      "properties": {
+        "total_artefacts": { "type": "integer", "minimum": 0 },
+        "by_category": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "by_suspicion_level": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

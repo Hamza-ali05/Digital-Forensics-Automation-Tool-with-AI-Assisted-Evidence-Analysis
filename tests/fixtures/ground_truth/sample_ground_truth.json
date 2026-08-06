@@ -1,0 +1,57 @@
+{
+  "dataset_name": "sample_dfrws_ground_truth",
+  "source": "dfrws",
+  "description": "Deterministic 10-artefact ground truth for DFAT tests",
+  "artefacts": [
+    {
+      "category": "filesystem_metadata",
+      "identifier": "/windows/system32/evil.dll",
+      "expected_data": {"path": "/Windows/System32/evil.dll"}
+    },
+    {
+      "category": "filesystem_metadata",
+      "identifier": "/windows/temp/payload.exe",
+      "expected_data": {"path": "/Windows/Temp/payload.exe"}
+    },
+    {
+      "category": "registry_key",
+      "identifier": "hkcu/software/microsoft/windows/currentversion/run/malware",
+      "expected_data": {"value_name": "Malware"}
+    },
+    {
+      "category": "registry_key",
+      "identifier": "hklm/system/currentcontrolset/services/evilsvc",
+      "expected_data": {"value_name": "ImagePath"}
+    },
+    {
+      "category": "browser_history",
+      "identifier": "http://malicious.example/payload",
+      "expected_data": {"browser": "chrome"}
+    },
+    {
+      "category": "browser_history",
+      "identifier": "http://c2.example/beacon",
+      "expected_data": {"browser": "firefox"}
+    },
+    {
+      "category": "event_log",
+      "identifier": "4688",
+      "expected_data": {"channel": "Security"}
+    },
+    {
+      "category": "event_log",
+      "identifier": "7045",
+      "expected_data": {"channel": "System"}
+    },
+    {
+      "category": "running_process",
+      "identifier": "mimikatz.exe",
+      "expected_data": {"pid": 1337}
+    },
+    {
+      "category": "running_process",
+      "identifier": "powershell.exe",
+      "expected_data": {"pid": 2204}
+    }
+  ]
+}

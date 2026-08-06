@@ -1,0 +1,42 @@
+[
+  {
+    "path": "/Windows/System32/cmd.exe",
+    "size": 278528,
+    "created": "2023-06-01T10:00:00Z",
+    "modified": "2023-06-01T10:00:00Z",
+    "accessed": "2024-01-10T08:15:00Z",
+    "md5": "11111111111111111111111111111111"
+  },
+  {
+    "path": "/Users/victim/Downloads/invoice.docm",
+    "size": 45056,
+    "created": "2024-01-09T14:22:00Z",
+    "modified": "2024-01-09T14:22:00Z",
+    "accessed": "2024-01-09T14:30:00Z",
+    "md5": "22222222222222222222222222222222"
+  },
+  {
+    "path": "/Windows/Temp/payload.exe",
+    "size": 102400,
+    "created": "2024-01-09T14:31:00Z",
+    "modified": "2024-01-09T14:31:00Z",
+    "accessed": "2024-01-09T14:31:05Z",
+    "md5": "33333333333333333333333333333333"
+  },
+  {
+    "path": "/Users/victim/AppData/Roaming/startup.lnk",
+    "size": 1204,
+    "created": "2024-01-09T14:35:00Z",
+    "modified": "2024-01-09T14:35:00Z",
+    "accessed": "2024-01-09T14:35:00Z",
+    "md5": "44444444444444444444444444444444"
+  },
+  {
+    "path": "/Windows/System32/evil.dll",
+    "size": 81920,
+    "created": "2024-01-09T14:40:00Z",
+    "modified": "2024-01-09T14:40:00Z",
+    "accessed": "2024-01-09T15:00:00Z",
+    "md5": "55555555555555555555555555555555"
+  }
+]

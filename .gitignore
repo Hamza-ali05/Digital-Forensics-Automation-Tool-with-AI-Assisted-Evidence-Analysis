@@ -16,11 +16,14 @@ venv/
 # Tooling caches
 .mypy_cache/
 .pytest_cache/
+.pytest_tmp/
 .ruff_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 .nox/
+.hypothesis/
 
 # IDE / OS
 .idea/

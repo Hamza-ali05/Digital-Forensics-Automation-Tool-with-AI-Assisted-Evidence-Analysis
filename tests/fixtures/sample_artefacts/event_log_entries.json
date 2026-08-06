@@ -1,0 +1,37 @@
+[
+  {
+    "event_id": 4624,
+    "channel": "Security",
+    "timestamp": "2024-01-09T08:00:00Z",
+    "message": "An account was successfully logged on",
+    "computer": "VICTIM-PC"
+  },
+  {
+    "event_id": 4688,
+    "channel": "Security",
+    "timestamp": "2024-01-09T14:31:00Z",
+    "message": "A new process has been created: payload.exe",
+    "computer": "VICTIM-PC"
+  },
+  {
+    "event_id": 7045,
+    "channel": "System",
+    "timestamp": "2024-01-09T14:36:00Z",
+    "message": "A service was installed: EvilSvc",
+    "computer": "VICTIM-PC"
+  },
+  {
+    "event_id": 1102,
+    "channel": "Security",
+    "timestamp": "2024-01-09T15:20:00Z",
+    "message": "The audit log was cleared",
+    "computer": "VICTIM-PC"
+  },
+  {
+    "event_id": 4648,
+    "channel": "Security",
+    "timestamp": "2024-01-09T14:45:00Z",
+    "message": "A logon was attempted using explicit credentials",
+    "computer": "VICTIM-PC"
+  }
+]

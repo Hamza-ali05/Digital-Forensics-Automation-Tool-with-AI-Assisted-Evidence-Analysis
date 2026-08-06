@@ -61,6 +61,13 @@ class EvaluationSettings(BaseModel):
     ground_truth_dir: Path = Path("./data/ground_truth")
     dfrws_dataset_path: Optional[Path] = None
     cfreds_dataset_path: Optional[Path] = None
+    metrics_thresholds: dict[str, float] = Field(
+        default_factory=lambda: {
+            "precision_min": 0.0,
+            "recall_min": 0.0,
+            "f1_min": 0.0,
+        }
+    )
 
 
 class LoggingSettings(BaseModel):

@@ -1,0 +1,32 @@
+[
+  {
+    "key_path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\SecurityHealth",
+    "value_name": "SecurityHealth",
+    "value_data": "C:\\Windows\\System32\\SecurityHealthSystray.exe",
+    "hive": "SOFTWARE"
+  },
+  {
+    "key_path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Malware",
+    "value_name": "Malware",
+    "value_data": "C:\\Users\\victim\\AppData\\Roaming\\payload.exe",
+    "hive": "NTUSER"
+  },
+  {
+    "key_path": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\EvilSvc",
+    "value_name": "ImagePath",
+    "value_data": "C:\\Windows\\Temp\\payload.exe",
+    "hive": "SYSTEM"
+  },
+  {
+    "key_path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU\\a",
+    "value_name": "a",
+    "value_data": "powershell.exe -enc ZQBhAHYAaQBsAA==",
+    "hive": "NTUSER"
+  },
+  {
+    "key_path": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Userinit",
+    "value_name": "Userinit",
+    "value_data": "C:\\Windows\\system32\\userinit.exe,C:\\Windows\\Temp\\payload.exe",
+    "hive": "SOFTWARE"
+  }
+]
