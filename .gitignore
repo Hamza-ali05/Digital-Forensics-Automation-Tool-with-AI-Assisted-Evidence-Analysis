@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Runtime / forensic data
+data/evidence/*
+data/datasets/*
+data/outputs/*
+data/questionnaire/responses/*
+!data/evidence/.gitkeep
+!data/datasets/.gitkeep
+!data/outputs/.gitkeep
+!data/questionnaire/.gitkeep
+!data/questionnaire/responses/.gitkeep
+!data/ground_truth/.gitkeep
+
+# Forensic image / dump patterns
+*.dd
+*.raw
+*.E01
+*.vmem
+
+# Secrets
+*.pem
+*.key
+credentials.json
+
+# Scaffold temp
+_prompt1_scaffold.py

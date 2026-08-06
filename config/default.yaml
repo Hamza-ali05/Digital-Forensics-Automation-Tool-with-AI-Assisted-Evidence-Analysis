@@ -1,0 +1,59 @@
+# DFAT default configuration.
+# Precedence: default.yaml → {environment}.yaml → .env → environment variables.
+
+env: development
+
+# Evidence input locations and accepted forensic formats.
+evidence:
+  evidence_dir: ./data/evidence
+  supported_disk_formats:
+    - ".dd"
+    - ".raw"
+    - ".e01"
+    - ".img"
+    - ".001"
+  supported_memory_formats:
+    - ".raw"
+    - ".vmem"
+    - ".dmp"
+    - ".mem"
+
+# Stage 1–2 forensic acquisition and parsing defaults.
+forensic_engine:
+  volatility_symbols_path: null
+  max_artefacts_per_category: 10000
+  parse_timeout_seconds: 300
+
+# Stage 3 local LLaMA-3 triage settings (host-local API only).
+ai_engine:
+  llm_api_url: http://localhost:11434/api/generate
+  llm_model: llama3
+  temperature: 0.1
+  max_tokens: 4096
+  request_timeout_seconds: 120
+  enable_fallback: true
+
+# Stage 4 dual-output reporting settings.
+reporting:
+  output_dir: ./data/outputs
+  json_schema_version: "1.0.0"
+  template_dir: src/dfat/reporting/templates
+
+# Stage 5 benchmark evaluation settings.
+evaluation:
+  ground_truth_dir: ./data/ground_truth
+  dfrws_dataset_path: null
+  cfreds_dataset_path: null
+
+# Application structured logging and forensic audit trail.
+logging:
+  log_level: INFO
+  audit_log_path: ./data/outputs/audit.log
+  log_format: json
+
+# Integrity hashing settings.
+security:
+  hash_algorithms:
+    - sha256
+    - md5
+  primary_hash: sha256

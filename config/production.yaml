@@ -1,0 +1,6 @@
+# Production overrides (merged over default.yaml).
+logging:
+  log_level: INFO
+ai_engine:
+  temperature: 0.1
+  request_timeout_seconds: 180

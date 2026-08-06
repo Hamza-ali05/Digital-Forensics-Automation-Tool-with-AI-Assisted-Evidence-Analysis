@@ -1,0 +1,12 @@
+# Testing overrides (merged over default.yaml).
+evidence:
+  evidence_dir: ./tests/fixtures/mock_evidence
+reporting:
+  output_dir: ./tests/fixtures/outputs
+logging:
+  log_level: WARNING
+ai_engine:
+  enable_fallback: true
+  request_timeout_seconds: 5
+evaluation:
+  ground_truth_dir: ./tests/fixtures/ground_truth

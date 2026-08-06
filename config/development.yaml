@@ -1,0 +1,5 @@
+# Development overrides (merged over default.yaml).
+logging:
+  log_level: DEBUG
+ai_engine:
+  temperature: 0.2
