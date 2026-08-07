@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-from dfat.ai_engine.llm.client import LocalLLMClient
+from dfat.ai_engine.analyzer import LocalLLMClient
 from dfat.core.models.artefact import RankedArtefact
 
 logger = logging.getLogger(__name__)

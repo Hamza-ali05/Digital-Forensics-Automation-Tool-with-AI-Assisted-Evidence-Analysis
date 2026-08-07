@@ -59,6 +59,7 @@ def test_get_permissions_and_allowed_resources() -> None:
         "analysis",
         "reports",
         "evaluation",
+        "cases",
         "users",
         "system",
     ]

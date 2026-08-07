@@ -19,10 +19,17 @@ if str(_SRC_ROOT) not in sys.path:
 
 from dfat.database.base import Base  # noqa: E402
 from dfat.database.models import (  # noqa: E402, F401 — populate Base.metadata
+    AIAnalysisRecordORM,
     ArtefactRecordORM,
     AuditLogRecordORM,
     BenchmarkRecordORM,
+    CaseInvestigatorORM,
+    CaseORM,
+    ChainOfCustodyORM,
+    EvidenceMetadataORM,
     EvidenceRecordORM,
+    EvidenceStatusHistoryORM,
+    PipelineJobORM,
     ReportRecordORM,
     RoleORM,
     SessionORM,

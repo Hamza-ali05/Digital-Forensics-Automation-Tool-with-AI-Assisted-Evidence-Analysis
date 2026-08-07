@@ -1,0 +1,251 @@
+"""Assemble polished investigative narratives with disclaimers and appendices.
+
+Known limitation: base LLaMA-3 narratives are advisory. Structured JSON remains
+the authoritative evidential record (Scanlon et al., 2023).
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import UTC, datetime
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from dfat.ai_engine.summarization.summarizer import SummaryResult
+from dfat.core.enums import SuspicionLevel
+from dfat.core.models.artefact import RankedArtefact
+
+_SUSPICION_ORDER: tuple[SuspicionLevel, ...] = (
+    SuspicionLevel.CRITICAL,
+    SuspicionLevel.HIGH,
+    SuspicionLevel.MEDIUM,
+    SuspicionLevel.LOW,
+    SuspicionLevel.INFORMATIONAL,
+)
+
+
+class FormattedNarrative(BaseModel):
+    """Polished investigative narrative ready for reporting display."""
+
+    model_config = ConfigDict(frozen=False)
+
+    full_text: str
+    sections: dict[str, str] = Field(default_factory=dict)
+    disclaimer: str
+    word_count: int = 0
+    model_used: str
+    confidence_score: float = 0.0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_required_sections(self) -> bool:
+        """Return True when core narrative sections are populated."""
+        required = {
+            "title",
+            "disclaimer",
+            "executive_summary",
+            "findings_by_category",
+            "timeline",
+            "ioc_table",
+            "recommended_actions",
+            "statistics",
+            "metadata",
+        }
+        return required.issubset(self.sections.keys()) and all(
+            self.sections[key].strip() for key in required
+        )
+
+
+class NarrativeFormatter:
+    """Format ``SummaryResult`` into a structured investigative narrative."""
+
+    def format_narrative(
+        self,
+        summary_result: SummaryResult,
+        ranked: list[RankedArtefact],
+        case_name: str,
+        evidence_id: str,
+    ) -> FormattedNarrative:
+        """Assemble title, disclaimer, sections, appendix, and metadata.
+
+        Args:
+            summary_result: Structured LLM summary.
+            ranked: Ranked artefacts for category/statistics appendices.
+            case_name: Case display name.
+            evidence_id: Evidence identifier.
+
+        Returns:
+            ``FormattedNarrative`` with full text and section map.
+        """
+        disclaimer = self._format_disclaimer(
+            summary_result.model_used,
+            summary_result.confidence_score,
+        )
+        title = self._format_title(case_name, evidence_id)
+        executive = summary_result.executive_summary.strip() or (
+            "No executive summary was produced by the model."
+        )
+        findings = self._format_findings_by_category(ranked)
+        if summary_result.key_findings:
+            findings = (
+                findings
+                + "\n\nKey findings from AI summary:\n"
+                + "\n".join(f"- {item}" for item in summary_result.key_findings)
+            )
+        timeline = (summary_result.timeline_narrative or "").strip() or (
+            "Timeline narrative unavailable; consult structured timeline data "
+            "in the JSON report."
+        )
+        ioc_table = self._format_ioc_table(summary_result.iocs_identified)
+        actions = self._format_actions(summary_result.recommended_actions)
+        statistics = self._format_statistics(ranked)
+        metadata = self._format_metadata(summary_result, case_name, evidence_id)
+
+        sections = {
+            "title": title,
+            "disclaimer": disclaimer,
+            "executive_summary": executive,
+            "findings_by_category": findings,
+            "timeline": timeline,
+            "ioc_table": ioc_table,
+            "recommended_actions": actions,
+            "statistics": statistics,
+            "metadata": metadata,
+        }
+
+        full_text = "\n\n".join(
+            [
+                title,
+                disclaimer,
+                "## Executive Summary\n" + executive,
+                "## Findings by Category\n" + findings,
+                "## Timeline of Events\n" + timeline,
+                "## Indicators of Compromise\n" + ioc_table,
+                "## Recommended Next Steps\n" + actions,
+                "## Statistics Appendix\n" + statistics,
+                "## Generation Metadata\n" + metadata,
+            ]
+        )
+        word_count = len(full_text.split())
+
+        return FormattedNarrative(
+            full_text=full_text,
+            sections=sections,
+            disclaimer=disclaimer,
+            word_count=word_count,
+            model_used=summary_result.model_used,
+            confidence_score=summary_result.confidence_score,
+        )
+
+    def _format_disclaimer(self, model: str, confidence: float) -> str:
+        """Return the AI-generated content disclaimer with confidence."""
+        clamped = max(0.0, min(1.0, float(confidence)))
+        return (
+            f"This narrative was generated by {model} "
+            f"(confidence: {clamped:.0%}). "
+            "AI-generated content should be verified against the structured JSON "
+            "artefact data. LLM outputs may contain inaccuracies "
+            "(Scanlon et al., 2023)."
+        )
+
+    def _format_findings_by_category(self, ranked: list[RankedArtefact]) -> str:
+        """Group HIGH+ findings by artefact category."""
+        if not ranked:
+            return "No ranked artefacts were available."
+
+        by_category: dict[str, list[RankedArtefact]] = defaultdict(list)
+        for item in ranked:
+            by_category[item.category.value].append(item)
+
+        lines: list[str] = []
+        for category in sorted(by_category.keys()):
+            items = sorted(
+                by_category[category],
+                key=lambda a: (
+                    _SUSPICION_ORDER.index(a.suspicion_level)
+                    if a.suspicion_level in _SUSPICION_ORDER
+                    else 99,
+                    -a.relevance_score,
+                ),
+            )
+            lines.append(f"### {category}")
+            for artefact in items[:10]:
+                reason = (artefact.classification_reasoning or "").strip()
+                reason_bit = f" — {reason}" if reason else ""
+                lines.append(
+                    f"- [{artefact.suspicion_level.value.upper()} | "
+                    f"score={artefact.relevance_score:.2f}] "
+                    f"{artefact.artefact_id}{reason_bit}"
+                )
+        return "\n".join(lines)
+
+    def _format_ioc_table(self, iocs: list[str]) -> str:
+        """Format IOC indicators as a simple markdown table."""
+        if not iocs:
+            return (
+                "| # | Indicator |\n|---|----------|\n"
+                "| — | None listed in the AI summary |"
+            )
+        rows = ["| # | Indicator |", "|---|----------|"]
+        for index, ioc in enumerate(iocs, start=1):
+            safe = str(ioc).replace("|", "\\|")
+            rows.append(f"| {index} | {safe} |")
+        return "\n".join(rows)
+
+    def _format_statistics(self, ranked: list[RankedArtefact]) -> str:
+        """Format suspicion and category statistics appendix."""
+        by_level: dict[str, int] = defaultdict(int)
+        by_category: dict[str, int] = defaultdict(int)
+        for item in ranked:
+            by_level[item.suspicion_level.value] += 1
+            by_category[item.category.value] += 1
+
+        lines = [f"Total ranked artefacts: {len(ranked)}", "", "By suspicion level:"]
+        for level in _SUSPICION_ORDER:
+            lines.append(f"- {level.value}: {by_level.get(level.value, 0)}")
+        lines.append("")
+        lines.append("By category:")
+        for category in sorted(by_category.keys()):
+            lines.append(f"- {category}: {by_category[category]}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_title(case_name: str, evidence_id: str) -> str:
+        """Build the narrative title block."""
+        generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        return (
+            f"# Investigative Narrative — {case_name}\n"
+            f"Evidence ID: `{evidence_id}`\n"
+            f"Generated: {generated}"
+        )
+
+    @staticmethod
+    def _format_actions(actions: list[str]) -> str:
+        """Format recommended actions as a bullet list."""
+        if not actions:
+            return (
+                "- Verify HIGH+ findings against the JSON evidential layer.\n"
+                "- Preserve chain of custody for any follow-up acquisitions."
+            )
+        return "\n".join(f"- {item}" for item in actions)
+
+    @staticmethod
+    def _format_metadata(
+        summary_result: SummaryResult,
+        case_name: str,
+        evidence_id: str,
+    ) -> str:
+        """Format generation metadata block."""
+        generated_at = summary_result.generated_at.astimezone(UTC).isoformat()
+        params = ", ".join(
+            f"{key}={value}" for key, value in sorted(summary_result.generation_params.items())
+        ) or "none"
+        return (
+            f"- Case: {case_name}\n"
+            f"- Evidence ID: {evidence_id}\n"
+            f"- Model: {summary_result.model_used}\n"
+            f"- Prompt version: {summary_result.prompt_version}\n"
+            f"- Confidence: {summary_result.confidence_score:.0%}\n"
+            f"- Generated at: {generated_at}\n"
+            f"- Generation params: {params}"
+        )

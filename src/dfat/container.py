@@ -3,30 +3,62 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 from dependency_injector import containers, providers
 
+from dfat.ai_engine.analyzer import LocalLLMClient
+from dfat.ai_engine.caching.response_cache import AIResponseCache
+from dfat.ai_engine.classification.classifier import (
+    DefaultConfidenceScorer as ClassificationDefaultConfidenceScorer,
+    LLMArtefactClassifier,
+)
+from dfat.ai_engine.classification.parser import ClassificationResponseParser
+from dfat.ai_engine.classification.prompts import ClassificationPromptBuilder
+from dfat.ai_engine.explanation.confidence import ConfidenceScorer
 from dfat.ai_engine.fallback.rule_based import RuleBasedAnalyzer
-from dfat.ai_engine.llm.client import LocalLLMClient
+from dfat.ai_engine.llm.client import OllamaClient
 from dfat.ai_engine.llm.config import LLMConfig
+from dfat.ai_engine.llm.connection import LLMConnectionManager
 from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
+from dfat.ai_engine.monitoring.ai_monitor import AIMonitor
+from dfat.ai_engine.preprocessing.batcher import ArtefactBatcher
+from dfat.ai_engine.preprocessing.serializer import ArtefactSerializer
+from dfat.ai_engine.ranking.parser import RankingResponseParser
+from dfat.ai_engine.ranking.prompts import RankingPromptBuilder
+from dfat.ai_engine.ranking.ranker import LLMRelevanceRanker
 from dfat.ai_engine.selector import select_analyzer
+from dfat.ai_engine.summarization.prompts import SummarizationPromptBuilder
+from dfat.ai_engine.summarization.summarizer import LLMInvestigativeSummarizer
+from dfat.ai_engine.summarization.validator import SummaryResponseValidator
 from dfat.ai_engine.triage.classifier import ArtefactClassifier
 from dfat.ai_engine.triage.ranker import RelevanceRanker
 from dfat.ai_engine.triage.summarizer import InvestigativeSummarizer
+from dfat.ai_engine.validation.response_validator import AIResponseValidator
 from dfat.core.enums import HashAlgorithm
+from dfat.core.interfaces.parser import IArtefactParser
 from dfat.forensic_engine.acquisition.image_handler import DiskImageHandler
 from dfat.forensic_engine.acquisition.integrity import IntegrityChecker
 from dfat.forensic_engine.acquisition.memory_handler import MemoryDumpHandler
 from dfat.forensic_engine.normalizer import ArtefactNormalizer
 from dfat.forensic_engine.orchestrator import ForensicOrchestrator
 from dfat.forensic_engine.parsers.browser import BrowserHistoryParser
+from dfat.forensic_engine.parsers.disk_access import DiskImageAccessor
 from dfat.forensic_engine.parsers.eventlog import EventLogParser
 from dfat.forensic_engine.parsers.filesystem import FileSystemParser
 from dfat.forensic_engine.parsers.memory.injection import CodeInjectionParser
 from dfat.forensic_engine.parsers.memory.network import NetworkArtefactParser
 from dfat.forensic_engine.parsers.memory.process import ProcessListParser
+from dfat.forensic_engine.parsers.memory.plugin_executor import PluginExecutor
+from dfat.forensic_engine.parsers.memory.registry_mem import MemoryRegistryParser
+from dfat.forensic_engine.parsers.memory.volatility_runner import VolatilityRunner
 from dfat.forensic_engine.parsers.registry import RegistryParser
+from dfat.evidence_management.custody_service import ChainOfCustodyService
+from dfat.evidence_management.hash_service import MultiHashService
+from dfat.evidence_management.metadata_service import EvidenceMetadataService
+from dfat.evidence_management.mime_identifier import MIMEIdentifier
+from dfat.evidence_management.validation_service import EvidenceValidationService
 from dfat.evaluation.benchmark.comparator import BenchmarkComparator
 from dfat.evaluation.benchmark.ground_truth import GroundTruthLoader
 from dfat.evaluation.benchmark.metrics import MetricsCalculator
@@ -40,6 +72,31 @@ from dfat.infrastructure.repositories.report_repo import FileSystemReportReposit
 from dfat.infrastructure.storage.local_storage import LocalFileStorage
 from dfat.infrastructure.storage.secure_storage import SecureStorage
 from dfat.pipeline import PipelineOrchestrator
+from dfat.pipeline.job_manager import JobManager
+from dfat.pipeline.job_runner import JobRunner
+from dfat.pipeline.error_handler import PipelineErrorHandler
+from dfat.pipeline.evidence_discovery import EvidenceDiscoveryService
+from dfat.pipeline.evidence_loader import EvidenceLoader
+from dfat.pipeline.evidence_router import EvidenceRouter
+from dfat.pipeline.parser_registry import ParserRegistry
+from dfat.pipeline.pipeline_logger import PipelineLogger
+from dfat.pipeline.progress_tracker import ProgressTracker
+from dfat.pipeline.stage_registry import StageRegistry
+from dfat.pipeline.stages.acquisition_stage import AcquisitionStage
+from dfat.pipeline.stages.evaluation_stage import EvaluationStage
+from dfat.pipeline.stages.parsing_stage import ParsingStage
+from dfat.pipeline.stages.reporting_stage import ReportingStage
+from dfat.pipeline.stages.triage_stage import TriageStage
+from dfat.forensic_engine.processing.categoriser import ArtefactCategoriser
+from dfat.forensic_engine.processing.correlator import ArtefactCorrelator
+from dfat.forensic_engine.processing.deduplicator import ArtefactDeduplicator
+from dfat.forensic_engine.processing.ioc_detector import IOCDetector
+from dfat.forensic_engine.processing.relationship_mapper import RelationshipMapper
+from dfat.forensic_engine.processing.standardiser import ArtefactStandardiser
+from dfat.forensic_engine.processing.timeline import TimelineGenerator
+from dfat.forensic_engine.triage.aggregator import TriageAggregator
+from dfat.forensic_engine.triage.rule_engine import RuleBasedTriageEngine
+from dfat.forensic_engine.triage.scoring import ScoringEngine
 from dfat.reporting.json_layer import StructuredJSONExporter
 from dfat.reporting.narrative import NarrativeAssembler
 from dfat.reporting.report_builder import DualOutputReportBuilder
@@ -47,19 +104,29 @@ from dfat.auth.jwt_handler import JWTHandler
 from dfat.auth.password import PasswordHasher
 from dfat.auth.rbac import PermissionChecker
 from dfat.database.engine import DatabaseEngine
+from dfat.database.repositories.ai_analysis_repo import SQLAlchemyAIAnalysisRepository
 from dfat.database.repositories.artefact_repo import SQLAlchemyArtefactRepository
 from dfat.database.repositories.audit_repo import SQLAlchemyAuditRepository
+from dfat.database.repositories.case_repo import SQLAlchemyCaseRepository
+from dfat.database.repositories.custody_repo import CustodyRepository
 from dfat.database.repositories.evaluation_repo import (
     SQLAlchemyBenchmarkRepository,
     SQLAlchemyUsabilityRepository,
 )
 from dfat.database.repositories.evidence_repo import SQLAlchemyEvidenceRepository
+from dfat.database.repositories.evidence_status_repo import (
+    EvidenceMetadataRepository,
+    EvidenceStatusRepository,
+)
+from dfat.database.repositories.pipeline_repo import SQLAlchemyPipelineRepository
 from dfat.database.repositories.report_repo import SQLAlchemyReportRepository
 from dfat.database.repositories.session_repo import SessionRepository
 from dfat.database.repositories.user_repo import SQLAlchemyUserRepository
 from dfat.services.analysis_service import AnalysisService
 from dfat.services.audit_service import AuditService
+from dfat.services.case_service import CaseService
 from dfat.services.evaluation_service import EvaluationService
+from dfat.services.evidence_management_service import EvidenceManagementService
 from dfat.services.evidence_service import EvidenceService
 from dfat.services.report_service import ReportService
 from dfat.services.user_service import UserService
@@ -67,7 +134,9 @@ from dfat.settings import (
     AIEngineSettings,
     AuthSettings,
     DFATSettings,
+    EvidenceSettings,
     LoggingSettings,
+    PipelineSettings,
     load_settings,
 )
 
@@ -140,6 +209,16 @@ def _auth_settings(settings: DFATSettings) -> AuthSettings:
 def _auth_refresh_expire(settings: DFATSettings) -> int:
     """Extract refresh-token expiry days from settings."""
     return settings.auth.refresh_token_expire_days
+
+
+def _pipeline_settings(settings: DFATSettings) -> PipelineSettings:
+    """Extract nested pipeline orchestration settings."""
+    return settings.pipeline
+
+
+def _evidence_settings(settings: DFATSettings) -> EvidenceSettings:
+    """Extract nested evidence path/format settings."""
+    return settings.evidence
 
 
 class LoggingContainer(containers.DeclarativeContainer):
@@ -228,11 +307,76 @@ class RepositoryContainer(containers.DeclarativeContainer):
         SQLAlchemyUsabilityRepository,
         session_factory=session_factory,
     )
+    case_repo = providers.Singleton(
+        SQLAlchemyCaseRepository,
+        session_factory=session_factory,
+    )
+    custody_repo = providers.Singleton(
+        CustodyRepository,
+        session_factory=session_factory,
+    )
+    evidence_status_repo = providers.Singleton(
+        EvidenceStatusRepository,
+        session_factory=session_factory,
+    )
+    evidence_metadata_repo = providers.Singleton(
+        EvidenceMetadataRepository,
+        session_factory=session_factory,
+    )
+    pipeline_repo = providers.Singleton(
+        SQLAlchemyPipelineRepository,
+        session_factory=session_factory,
+    )
+    ai_analysis_repo = providers.Singleton(
+        SQLAlchemyAIAnalysisRepository,
+        session_factory=session_factory,
+    )
 
 
 def _volatility_symbols_path(settings: DFATSettings) -> Path | None:
     """Extract optional Volatility symbols path from settings."""
     return settings.forensic_engine.volatility_symbols_path
+
+
+def _plugin_executor_timeout(settings: DFATSettings) -> int:
+    """Extract Volatility plugin timeout from pipeline settings."""
+    return int(settings.pipeline.volatility_plugins_timeout)
+
+
+def _enable_memory_registry(settings: DFATSettings) -> bool:
+    """Return whether the memory registry (hivelist/printkey) parser is enabled."""
+    return bool(settings.pipeline.enable_memory_registry)
+
+
+def _build_forensic_parsers(
+    filesystem_parser: IArtefactParser,
+    registry_parser: IArtefactParser,
+    browser_parser: IArtefactParser,
+    eventlog_parser: IArtefactParser,
+    process_parser: IArtefactParser,
+    network_parser: IArtefactParser,
+    injection_parser: IArtefactParser,
+    memory_registry_parser: IArtefactParser,
+    enable_memory_registry: bool,
+) -> list[IArtefactParser]:
+    """Assemble the artefact parser list for registry and orchestrator wiring.
+
+    Always includes disk parsers and the three core memory parsers
+    (process, network, injection). ``MemoryRegistryParser`` is included only
+    when ``enable_memory_registry`` is ``True``.
+    """
+    parsers: list[IArtefactParser] = [
+        filesystem_parser,
+        registry_parser,
+        browser_parser,
+        eventlog_parser,
+        process_parser,
+        network_parser,
+        injection_parser,
+    ]
+    if enable_memory_registry:
+        parsers.append(memory_registry_parser)
+    return parsers
 
 
 class CacheContainer(containers.DeclarativeContainer):
@@ -253,11 +397,19 @@ class ForensicEngineContainer(containers.DeclarativeContainer):
         audit_logger=audit_logger,
         hash_algorithm=providers.Callable(_primary_hash, settings),
     )
+    multi_hash_service = providers.Singleton(
+        MultiHashService,
+        audit_logger=audit_logger,
+    )
     image_handler = providers.Singleton(
         DiskImageHandler,
         integrity_checker=integrity_checker,
         audit_logger=audit_logger,
         storage=local_storage,
+    )
+    disk_image_accessor = providers.Singleton(
+        DiskImageAccessor,
+        audit_logger=audit_logger,
     )
     memory_handler = providers.Singleton(
         MemoryDumpHandler,
@@ -266,43 +418,69 @@ class ForensicEngineContainer(containers.DeclarativeContainer):
         storage=local_storage,
         volatility_symbols_path=providers.Callable(_volatility_symbols_path, settings),
     )
+    volatility_runner = providers.Singleton(
+        VolatilityRunner,
+        symbols_path=providers.Callable(_volatility_symbols_path, settings),
+        audit_logger=audit_logger,
+    )
+    plugin_executor = providers.Factory(
+        PluginExecutor,
+        volatility_runner=volatility_runner,
+        audit_logger=audit_logger,
+        timeout_seconds=providers.Callable(_plugin_executor_timeout, settings),
+    )
     filesystem_parser = providers.Singleton(
         FileSystemParser,
+        disk_accessor=disk_image_accessor,
         audit_logger=audit_logger,
     )
     registry_parser = providers.Singleton(
         RegistryParser,
+        disk_accessor=disk_image_accessor,
         audit_logger=audit_logger,
     )
     browser_parser = providers.Singleton(
         BrowserHistoryParser,
+        disk_accessor=disk_image_accessor,
         audit_logger=audit_logger,
     )
     eventlog_parser = providers.Singleton(
         EventLogParser,
+        disk_accessor=disk_image_accessor,
         audit_logger=audit_logger,
     )
     process_parser = providers.Singleton(
         ProcessListParser,
+        plugin_executor=plugin_executor,
         audit_logger=audit_logger,
     )
     network_parser = providers.Singleton(
         NetworkArtefactParser,
+        plugin_executor=plugin_executor,
         audit_logger=audit_logger,
     )
     injection_parser = providers.Singleton(
         CodeInjectionParser,
+        plugin_executor=plugin_executor,
+        audit_logger=audit_logger,
+    )
+    memory_registry_parser = providers.Singleton(
+        MemoryRegistryParser,
+        plugin_executor=plugin_executor,
         audit_logger=audit_logger,
     )
     normalizer = providers.Singleton(ArtefactNormalizer)
-    parsers = providers.List(
-        filesystem_parser,
-        registry_parser,
-        browser_parser,
-        eventlog_parser,
-        process_parser,
-        network_parser,
-        injection_parser,
+    parsers = providers.Factory(
+        _build_forensic_parsers,
+        filesystem_parser=filesystem_parser,
+        registry_parser=registry_parser,
+        browser_parser=browser_parser,
+        eventlog_parser=eventlog_parser,
+        process_parser=process_parser,
+        network_parser=network_parser,
+        injection_parser=injection_parser,
+        memory_registry_parser=memory_registry_parser,
+        enable_memory_registry=providers.Callable(_enable_memory_registry, settings),
     )
     orchestrator = providers.Singleton(
         ForensicOrchestrator,
@@ -315,21 +493,40 @@ class ForensicEngineContainer(containers.DeclarativeContainer):
     )
 
 
+def _ollama_base_url(api_url: str) -> str:
+    """Derive Ollama base URL from a base or ``/api/generate`` endpoint."""
+    parsed = urlparse(api_url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return api_url.rstrip("/")
+
+
 def _llm_config(settings: DFATSettings) -> LLMConfig:
     """Build ``LLMConfig`` from application settings."""
     ai: AIEngineSettings = settings.ai_engine
     return LLMConfig(
-        api_url=ai.llm_api_url,
+        api_url=_ollama_base_url(ai.llm_api_url),
         model=ai.llm_model,
         temperature=ai.temperature,
         max_tokens=ai.max_tokens,
         request_timeout_seconds=ai.request_timeout_seconds,
+        context_window=ai.context_window,
+        max_retries=ai.max_retries,
+        retry_delay_seconds=ai.retry_delay_seconds,
+        num_predict=min(ai.max_tokens, 2048),
     )
 
 
 def _enable_fallback(settings: DFATSettings) -> bool:
     """Extract fallback toggle from settings."""
     return settings.ai_engine.enable_fallback
+
+
+class _NullAuditService:
+    """No-op audit port used when wiring AIMonitor before ServicesContainer."""
+
+    async def log_action(self, *args: Any, **kwargs: Any) -> None:
+        return None
 
 
 class AIEngineContainer(containers.DeclarativeContainer):
@@ -339,14 +536,103 @@ class AIEngineContainer(containers.DeclarativeContainer):
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
 
     llm_config = providers.Singleton(_llm_config, settings)
+    connection_manager = providers.Singleton(
+        LLMConnectionManager,
+        config=llm_config,
+        audit_logger=audit_logger,
+    )
+    ollama_client = providers.Singleton(
+        OllamaClient,
+        config=llm_config,
+        connection_manager=connection_manager,
+        audit_logger=audit_logger,
+    )
     prompts = providers.Singleton(ForensicPromptTemplates)
+    artefact_serializer = providers.Singleton(ArtefactSerializer)
+    artefact_batcher = providers.Singleton(
+        ArtefactBatcher,
+        max_tokens_per_batch=6000,
+        serializer=artefact_serializer,
+    )
+    classification_prompt_builder = providers.Singleton(
+        ClassificationPromptBuilder,
+        templates=prompts,
+        serializer=artefact_serializer,
+        batcher=artefact_batcher,
+    )
+    classification_response_parser = providers.Singleton(ClassificationResponseParser)
+    classification_confidence = providers.Singleton(ClassificationDefaultConfidenceScorer)
+    llm_artefact_classifier = providers.Singleton(
+        LLMArtefactClassifier,
+        ollama_client=ollama_client,
+        prompt_builder=classification_prompt_builder,
+        response_parser=classification_response_parser,
+        confidence_scorer=classification_confidence,
+        audit_logger=audit_logger,
+        config=llm_config,
+    )
+    ranking_prompt_builder = providers.Singleton(
+        RankingPromptBuilder,
+        templates=prompts,
+        serializer=artefact_serializer,
+    )
+    ranking_response_parser = providers.Singleton(RankingResponseParser)
+    llm_relevance_ranker = providers.Singleton(
+        LLMRelevanceRanker,
+        ollama_client=ollama_client,
+        prompt_builder=ranking_prompt_builder,
+        response_parser=ranking_response_parser,
+        audit_logger=audit_logger,
+        config=llm_config,
+    )
+    summarization_prompt_builder = providers.Singleton(
+        SummarizationPromptBuilder,
+        templates=prompts,
+        serializer=artefact_serializer,
+    )
+    summary_response_validator = providers.Singleton(SummaryResponseValidator)
+    llm_investigative_summarizer = providers.Singleton(
+        LLMInvestigativeSummarizer,
+        ollama_client=ollama_client,
+        prompt_builder=summarization_prompt_builder,
+        response_validator=summary_response_validator,
+        audit_logger=audit_logger,
+        config=llm_config,
+    )
+    confidence_scorer = providers.Singleton(ConfidenceScorer)
+    hallucination_guard = providers.Singleton(AIResponseValidator.default_guard)
+    ai_response_validator = providers.Singleton(
+        AIResponseValidator,
+        hallucination_guard=hallucination_guard,
+        confidence_scorer=confidence_scorer,
+    )
+    ai_response_cache = providers.Singleton(
+        AIResponseCache,
+        max_size=1000,
+        ttl_seconds=3600,
+    )
+    ai_monitor = providers.Singleton(
+        AIMonitor,
+        audit_service=providers.Factory(_NullAuditService),
+        app_logger=providers.Object(None),
+    )
     llm_client = providers.Singleton(
         LocalLLMClient,
         config=llm_config,
+        ollama_client=ollama_client,
+        connection_manager=connection_manager,
+        classifier=llm_artefact_classifier,
+        ranker=llm_relevance_ranker,
+        summarizer=llm_investigative_summarizer,
+        validator=ai_response_validator,
+        cache=ai_response_cache,
+        monitor=ai_monitor,
         audit_logger=audit_logger,
-        prompts=prompts,
     )
-    fallback = providers.Singleton(RuleBasedAnalyzer)
+    fallback = providers.Singleton(
+        RuleBasedAnalyzer,
+        audit_logger=audit_logger,
+    )
     classifier = providers.Singleton(
         ArtefactClassifier,
         llm_client=llm_client,
@@ -444,11 +730,55 @@ class EvaluationEngineContainer(containers.DeclarativeContainer):
     response_analyzer = providers.Factory(ResponseAnalyzer)
 
 
+def _pipeline_max_concurrent(settings: DFATSettings) -> int:
+    """Extract max concurrent pipeline jobs from settings."""
+    return settings.pipeline.max_concurrent_jobs
+
+
+def _pipeline_app_logger() -> Any:
+    """Return a structlog bound logger for pipeline events."""
+    import structlog
+
+    return structlog.get_logger("dfat.pipeline")
+
+
+def _build_parser_registry(parsers: list[IArtefactParser]) -> ParserRegistry:
+    """Populate a ``ParserRegistry`` from the forensic engine parser list."""
+    registry = ParserRegistry()
+    for parser in parsers:
+        registry.register(parser)
+    return registry
+
+
+def _parser_timeout_seconds(settings: DFATSettings) -> float:
+    """Extract per-parser timeout from pipeline settings."""
+    return float(settings.pipeline.parser_timeout_seconds)
+
+
+def _build_stage_registry(
+    acquisition_stage: AcquisitionStage,
+    parsing_stage: ParsingStage,
+    triage_stage: TriageStage,
+    reporting_stage: ReportingStage,
+    evaluation_stage: EvaluationStage,
+) -> StageRegistry:
+    """Create a stage registry with all five pipeline stages registered."""
+    registry = StageRegistry()
+    registry.register(acquisition_stage)
+    registry.register(parsing_stage)
+    registry.register(triage_stage)
+    registry.register(reporting_stage)
+    registry.register(evaluation_stage)
+    return registry
+
+
 class PipelineContainer(containers.DeclarativeContainer):
     """Top-level pipeline orchestration providers."""
 
+    settings = providers.Dependency(instance_of=DFATSettings)
     forensic_orchestrator = providers.Dependency(instance_of=ForensicOrchestrator)
     analyzer = providers.Dependency()
+    llm_analyzer = providers.Dependency()
     fallback_analyzer = providers.Dependency(instance_of=RuleBasedAnalyzer)
     report_builder = providers.Dependency(instance_of=DualOutputReportBuilder)
     evidence_repo = providers.Dependency(instance_of=FileSystemEvidenceRepository)
@@ -456,18 +786,163 @@ class PipelineContainer(containers.DeclarativeContainer):
     ground_truth_loader = providers.Dependency(instance_of=GroundTruthLoader)
     benchmark_comparator = providers.Dependency(instance_of=BenchmarkComparator)
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+    audit_repo = providers.Dependency(instance_of=SQLAlchemyAuditRepository)
+    sqlalchemy_evidence_repo = providers.Dependency(
+        instance_of=SQLAlchemyEvidenceRepository
+    )
+    disk_handler = providers.Dependency(instance_of=DiskImageHandler)
+    memory_handler = providers.Dependency(instance_of=MemoryDumpHandler)
+    integrity_checker = providers.Dependency(instance_of=IntegrityChecker)
+    multi_hash_service = providers.Dependency(instance_of=MultiHashService)
+    artefact_parsers = providers.Dependency()
+    artefact_normalizer = providers.Dependency(instance_of=ArtefactNormalizer)
+    evidence_management_service = providers.Dependency(
+        instance_of=EvidenceManagementService
+    )
+    custody_service = providers.Dependency(instance_of=ChainOfCustodyService)
+    case_repo = providers.Dependency(instance_of=SQLAlchemyCaseRepository)
+    pipeline_repo = providers.Dependency(instance_of=SQLAlchemyPipelineRepository)
+
+    pipeline_settings = providers.Callable(_pipeline_settings, settings)
+    pipeline_audit_service = providers.Factory(
+        AuditService,
+        audit_repo=audit_repo,
+        forensic_audit_logger=audit_logger,
+    )
+    progress_tracker = providers.Singleton(ProgressTracker)
+    pipeline_logger = providers.Factory(
+        PipelineLogger,
+        audit_service=pipeline_audit_service,
+        app_logger=providers.Callable(_pipeline_app_logger),
+    )
+    pipeline_error_handler = providers.Factory(
+        PipelineErrorHandler,
+        pipeline_logger=pipeline_logger,
+    )
+    evidence_discovery_service = providers.Factory(
+        EvidenceDiscoveryService,
+        evidence_settings=providers.Callable(_evidence_settings, settings),
+        evidence_repo=sqlalchemy_evidence_repo,
+        audit_service=pipeline_audit_service,
+    )
+    evidence_loader = providers.Factory(
+        EvidenceLoader,
+        disk_handler=disk_handler,
+        memory_handler=memory_handler,
+        integrity_checker=integrity_checker,
+        hash_service=multi_hash_service,
+        audit_service=pipeline_audit_service,
+    )
+    acquisition_stage = providers.Factory(
+        AcquisitionStage,
+        evidence_loader=evidence_loader,
+        evidence_management_service=evidence_management_service,
+        custody_service=custody_service,
+        progress_tracker=progress_tracker,
+        audit_service=pipeline_audit_service,
+    )
+    parser_registry = providers.Singleton(
+        _build_parser_registry,
+        parsers=artefact_parsers,
+    )
+    evidence_router = providers.Factory(
+        EvidenceRouter,
+        parser_registry=parser_registry,
+    )
+    parsing_stage = providers.Factory(
+        ParsingStage,
+        parser_registry=parser_registry,
+        evidence_router=evidence_router,
+        normalizer=artefact_normalizer,
+        progress_tracker=progress_tracker,
+        error_handler=pipeline_error_handler,
+        audit_service=pipeline_audit_service,
+        parser_timeout_seconds=providers.Callable(_parser_timeout_seconds, settings),
+    )
+
+    # Artefact processing + triage providers (Stage 3).
+    artefact_categoriser = providers.Singleton(ArtefactCategoriser)
+    artefact_standardiser = providers.Singleton(ArtefactStandardiser)
+    artefact_deduplicator = providers.Singleton(ArtefactDeduplicator)
+    artefact_correlator = providers.Singleton(ArtefactCorrelator)
+    relationship_mapper = providers.Singleton(RelationshipMapper)
+    timeline_generator = providers.Singleton(TimelineGenerator)
+    ioc_detector = providers.Singleton(IOCDetector)
+    scoring_engine = providers.Singleton(ScoringEngine)
+    rule_based_triage_engine = providers.Singleton(
+        RuleBasedTriageEngine,
+        scoring_engine=scoring_engine,
+    )
+    triage_aggregator = providers.Singleton(TriageAggregator)
+    triage_stage = providers.Factory(
+        TriageStage,
+        ioc_detector=ioc_detector,
+        scoring_engine=scoring_engine,
+        rule_engine=rule_based_triage_engine,
+        triage_aggregator=triage_aggregator,
+        llm_analyzer=llm_analyzer,
+        fallback_analyzer=fallback_analyzer,
+        progress_tracker=progress_tracker,
+        audit_service=pipeline_audit_service,
+        settings=settings,
+        categoriser=artefact_categoriser,
+        standardiser=artefact_standardiser,
+        deduplicator=artefact_deduplicator,
+        correlator=artefact_correlator,
+        relationship_mapper=relationship_mapper,
+        timeline_generator=timeline_generator,
+    )
+    reporting_stage = providers.Factory(
+        ReportingStage,
+        report_builder=report_builder,
+        progress_tracker=progress_tracker,
+        audit_service=pipeline_audit_service,
+    )
+    evaluation_stage = providers.Factory(
+        EvaluationStage,
+        benchmark_comparator=benchmark_comparator,
+        ground_truth_loader=ground_truth_loader,
+        progress_tracker=progress_tracker,
+        audit_service=pipeline_audit_service,
+        settings=settings,
+    )
+    stage_registry = providers.Singleton(
+        _build_stage_registry,
+        acquisition_stage=acquisition_stage,
+        parsing_stage=parsing_stage,
+        triage_stage=triage_stage,
+        reporting_stage=reporting_stage,
+        evaluation_stage=evaluation_stage,
+    )
+    job_manager = providers.Singleton(
+        JobManager,
+        audit_service=pipeline_audit_service,
+        max_concurrent=providers.Callable(_pipeline_max_concurrent, settings),
+    )
+    job_runner = providers.Factory(
+        JobRunner,
+        job_manager=job_manager,
+        stage_registry=stage_registry,
+        audit_service=pipeline_audit_service,
+    )
 
     pipeline_orchestrator = providers.Singleton(
         PipelineOrchestrator,
-        forensic_orchestrator=forensic_orchestrator,
-        analyzer=analyzer,
-        fallback_analyzer=fallback_analyzer,
-        report_builder=report_builder,
-        evidence_repo=evidence_repo,
-        report_repo=report_repo,
+        stage_registry=stage_registry,
+        job_manager=job_manager,
+        job_runner=job_runner,
+        progress_tracker=progress_tracker,
+        pipeline_logger=pipeline_logger,
+        evidence_repo=sqlalchemy_evidence_repo,
+        case_repo=case_repo,
+        audit_service=pipeline_audit_service,
+        settings=settings,
+        evidence_management_service=evidence_management_service,
+        custody_service=custody_service,
         ground_truth_loader=ground_truth_loader,
         benchmark_comparator=benchmark_comparator,
-        audit_logger=audit_logger,
+        pipeline_repo=pipeline_repo,
+        parser_registry=parser_registry,
     )
 
 
@@ -517,9 +992,14 @@ class ServicesContainer(containers.DeclarativeContainer):
     report_repo = providers.Dependency(instance_of=SQLAlchemyReportRepository)
     benchmark_repo = providers.Dependency(instance_of=SQLAlchemyBenchmarkRepository)
     usability_repo = providers.Dependency(instance_of=SQLAlchemyUsabilityRepository)
+    case_repo = providers.Dependency(instance_of=SQLAlchemyCaseRepository)
+    custody_repo = providers.Dependency(instance_of=CustodyRepository)
+    evidence_status_repo = providers.Dependency(instance_of=EvidenceStatusRepository)
+    evidence_metadata_repo = providers.Dependency(instance_of=EvidenceMetadataRepository)
     password_hasher = providers.Dependency(instance_of=PasswordHasher)
     jwt_handler = providers.Dependency(instance_of=JWTHandler)
     integrity_checker = providers.Dependency(instance_of=IntegrityChecker)
+    multi_hash_service = providers.Dependency(instance_of=MultiHashService)
     disk_handler = providers.Dependency(instance_of=DiskImageHandler)
     memory_handler = providers.Dependency(instance_of=MemoryDumpHandler)
     local_storage = providers.Dependency(instance_of=LocalFileStorage)
@@ -527,6 +1007,43 @@ class ServicesContainer(containers.DeclarativeContainer):
     benchmark_comparator = providers.Dependency(instance_of=BenchmarkComparator)
     ground_truth_loader = providers.Dependency(instance_of=GroundTruthLoader)
     forensic_audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+
+    mime_identifier = providers.Singleton(MIMEIdentifier)
+    evidence_metadata_service = providers.Factory(
+        EvidenceMetadataService,
+        metadata_repo=evidence_metadata_repo,
+        hash_service=multi_hash_service,
+        mime_identifier=mime_identifier,
+    )
+    evidence_validation_service = providers.Factory(
+        EvidenceValidationService,
+        mime_identifier=mime_identifier,
+        hash_service=multi_hash_service,
+        evidence_status_repo=evidence_status_repo,
+        audit_logger=forensic_audit_logger,
+        settings=settings,
+        evidence_metadata_repo=evidence_metadata_repo,
+    )
+    audit_service = providers.Factory(
+        AuditService,
+        audit_repo=audit_repo,
+        forensic_audit_logger=forensic_audit_logger,
+    )
+    chain_of_custody_service = providers.Factory(
+        ChainOfCustodyService,
+        custody_repo=custody_repo,
+        hash_service=multi_hash_service,
+        audit_service=audit_service,
+        evidence_repo=evidence_repo,
+    )
+    case_service = providers.Factory(
+        CaseService,
+        case_repo=case_repo,
+        evidence_repo=evidence_repo,
+        user_repo=user_repo,
+        audit_service=audit_service,
+        custody_service=chain_of_custody_service,
+    )
 
     user_service = providers.Factory(
         UserService,
@@ -545,6 +1062,18 @@ class ServicesContainer(containers.DeclarativeContainer):
         memory_handler=memory_handler,
         audit_repo=audit_repo,
         storage=local_storage,
+    )
+    evidence_management_service = providers.Factory(
+        EvidenceManagementService,
+        evidence_service=evidence_service,
+        validation_service=evidence_validation_service,
+        hash_service=multi_hash_service,
+        custody_service=chain_of_custody_service,
+        metadata_repo=evidence_metadata_repo,
+        status_repo=evidence_status_repo,
+        evidence_repo=evidence_repo,
+        case_repo=case_repo,
+        audit_service=audit_service,
     )
     analysis_service = providers.Factory(
         AnalysisService,
@@ -567,11 +1096,6 @@ class ServicesContainer(containers.DeclarativeContainer):
         benchmark_comparator=benchmark_comparator,
         ground_truth_loader=ground_truth_loader,
         audit_repo=audit_repo,
-    )
-    audit_service = providers.Factory(
-        AuditService,
-        audit_repo=audit_repo,
-        forensic_audit_logger=forensic_audit_logger,
     )
 
 
@@ -616,8 +1140,10 @@ class ApplicationContainer(containers.DeclarativeContainer):
     )
     pipeline = providers.Container(
         PipelineContainer,
+        settings=settings,
         forensic_orchestrator=forensic_engine.orchestrator,
         analyzer=ai_engine.active_analyzer,
+        llm_analyzer=ai_engine.llm_client,
         fallback_analyzer=ai_engine.fallback,
         report_builder=reporting_engine.report_builder,
         evidence_repo=repositories.file_evidence_repo,
@@ -625,6 +1151,16 @@ class ApplicationContainer(containers.DeclarativeContainer):
         ground_truth_loader=evaluation_engine.ground_truth_loader,
         benchmark_comparator=evaluation_engine.comparator,
         audit_logger=logging.forensic_audit_logger,
+        audit_repo=repositories.audit_repo,
+        sqlalchemy_evidence_repo=repositories.evidence_repo,
+        case_repo=repositories.case_repo,
+        pipeline_repo=repositories.pipeline_repo,
+        disk_handler=forensic_engine.image_handler,
+        memory_handler=forensic_engine.memory_handler,
+        integrity_checker=forensic_engine.integrity_checker,
+        multi_hash_service=forensic_engine.multi_hash_service,
+        artefact_parsers=forensic_engine.parsers,
+        artefact_normalizer=forensic_engine.normalizer,
     )
 
     services = providers.Container(
@@ -638,9 +1174,14 @@ class ApplicationContainer(containers.DeclarativeContainer):
         report_repo=repositories.report_repo,
         benchmark_repo=repositories.benchmark_repo,
         usability_repo=repositories.usability_repo,
+        case_repo=repositories.case_repo,
+        custody_repo=repositories.custody_repo,
+        evidence_status_repo=repositories.evidence_status_repo,
+        evidence_metadata_repo=repositories.evidence_metadata_repo,
         password_hasher=auth.password_hasher,
         jwt_handler=auth.jwt_handler,
         integrity_checker=forensic_engine.integrity_checker,
+        multi_hash_service=forensic_engine.multi_hash_service,
         disk_handler=forensic_engine.image_handler,
         memory_handler=forensic_engine.memory_handler,
         local_storage=storage.local_storage,
@@ -649,3 +1190,20 @@ class ApplicationContainer(containers.DeclarativeContainer):
         ground_truth_loader=evaluation_engine.ground_truth_loader,
         forensic_audit_logger=logging.forensic_audit_logger,
     )
+
+
+def build_application_container() -> ApplicationContainer:
+    """Create the root DI container with cross-container dependencies wired.
+
+    ``AcquisitionStage`` needs evidence-management / custody services that live
+    in ``ServicesContainer``, while services need ``pipeline_orchestrator``.
+    Overrides break that cycle after both nested containers exist.
+    """
+    container = ApplicationContainer()
+    container.pipeline.evidence_management_service.override(
+        container.services.evidence_management_service
+    )
+    container.pipeline.custody_service.override(
+        container.services.chain_of_custody_service
+    )
+    return container

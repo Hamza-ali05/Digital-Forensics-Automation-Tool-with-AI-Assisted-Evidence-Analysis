@@ -35,6 +35,7 @@ forensic = [
     "python-registry>=1.3",
     "volatility3>=2.4",
     "python-evtx>=0.7",
+    "python-magic>=0.4",
 ]
 # ai optional group reserved for future use.
 # LLaMA-3 integration via local HTTP API — no Python package dependency

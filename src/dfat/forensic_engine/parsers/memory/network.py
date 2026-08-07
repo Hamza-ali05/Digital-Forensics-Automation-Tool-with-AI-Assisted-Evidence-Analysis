@@ -1,24 +1,65 @@
 """Volatility3 network connection parser (netscan).
 
-Artefact ``raw_data`` schema for ``NETWORK_CONNECTION``:
-    protocol, local_address, local_port, remote_address, remote_port,
-    state, pid, owner_process
+Artefact ``raw_data`` schema for ``NETWORK_CONNECTION`` (contract)::
+
+    {
+        "protocol": str,
+        "local_address": str,
+        "local_port": int | null,
+        "remote_address": str,
+        "remote_port": int | null,
+        "state": str,
+        "pid": int | null,
+        "owner_process": str | null,
+        "created_time": ISO-8601 str | null,
+        "is_external": bool,
+    }
+
+``is_external`` is ``True`` when ``remote_address`` is a public (non-private)
+IPv4/IPv6 address.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Optional
 
 from dfat.core.enums import ArtefactCategory, EvidenceType
 from dfat.core.exceptions import MemoryParsingError
-from dfat.core.models.artefact import Artefact, ArtefactSet
+from dfat.core.models.artefact import Artefact
 from dfat.core.models.evidence import EvidenceImage
 from dfat.forensic_engine.parsers.base import BaseParser
-from dfat.forensic_engine.parsers.memory import _volatility_utils
+from dfat.forensic_engine.parsers.memory.plugin_executor import PluginExecutor
+from dfat.forensic_engine.parsers.utils import convert_timestamp
+from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
+from dfat.shared.constants import MAX_ARTEFACTS_PER_CATEGORY
+
+_NETSCAN_MODULE = "volatility3.plugins.windows.netscan"
 
 
 class NetworkArtefactParser(BaseParser):
-    """Extract network connection artefacts from memory dumps."""
+    """Extract network connection artefacts from memory dumps via ``netscan``."""
+
+    _parse_error_class = MemoryParsingError
+
+    def __init__(
+        self,
+        plugin_executor: PluginExecutor,
+        audit_logger: ForensicAuditLogger,
+        max_artefacts: int = MAX_ARTEFACTS_PER_CATEGORY,
+    ) -> None:
+        """Initialise the network artefact parser.
+
+        Args:
+            plugin_executor: Async Volatility3 plugin executor.
+            audit_logger: ACPO-compliant forensic audit logger.
+            max_artefacts: Maximum artefacts retained for a single parse.
+        """
+        super().__init__(audit_logger=audit_logger, max_artefacts=max_artefacts)
+        self._executor = plugin_executor
 
     @property
     def parser_name(self) -> str:
@@ -33,61 +74,123 @@ class NetworkArtefactParser(BaseParser):
         """Return supported evidence types."""
         return [EvidenceType.MEMORY_DUMP]
 
-    def parse(self, evidence: EvidenceImage) -> ArtefactSet:
-        """Extract network connections using Volatility3 netscan.
-
-        Args:
-            evidence: Memory dump evidence metadata.
-
-        Returns:
-            Artefact set of network connections.
-
-        Raises:
-            ImportError: If ``volatility3`` is not installed.
-            MemoryParsingError: If Volatility execution fails.
-        """
-        self._log_parse_start(evidence.evidence_id)
-        _volatility_utils.require_volatility3()
+    def _do_parse(self, evidence: EvidenceImage) -> list[Artefact]:
+        """Extract network connections using Volatility3 ``netscan``."""
+        dump_path = Path(evidence.file_path)
+        rows = self._await(
+            self._executor.execute_plugin(
+                dump_path,
+                "NetScan",
+                _NETSCAN_MODULE,
+                evidence.evidence_id,
+            )
+        )
         artefacts: list[Artefact] = []
-        try:
-            for row in _volatility_utils.iter_plugin_rows(
-                evidence.file_path,
-                "windows.netscan.NetScan",
-            ):
-                if len(artefacts) >= self._max_artefacts:
-                    break
-                artefacts.append(
-                    self._create_artefact(
-                        category=ArtefactCategory.NETWORK_CONNECTION,
-                        evidence_id=evidence.evidence_id,
-                        source_path=str(evidence.file_path),
-                        raw_data=self._map_row(row),
-                    )
+        for row in rows:
+            if not self._check_limit(len(artefacts)):
+                break
+            artefacts.append(
+                self._create_artefact(
+                    category=ArtefactCategory.NETWORK_CONNECTION,
+                    evidence_id=evidence.evidence_id,
+                    source_path=str(dump_path),
+                    raw_data=self._map_row(row),
                 )
-        except ImportError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            self._log_parse_error(evidence.evidence_id, exc)
-            raise MemoryParsingError(
-                f"NetworkArtefactParser failed for {evidence.file_path}",
-                context={"evidence_id": evidence.evidence_id, "error": str(exc)},
-            ) from exc
+            )
+        return artefacts
 
-        artefacts = self._truncate(artefacts)
-        result = self._to_artefact_set(evidence.evidence_id, artefacts)
-        self._log_parse_end(evidence.evidence_id, len(artefacts))
-        return result
+    def _map_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Map a Volatility ``netscan`` row to the ``NETWORK_CONNECTION`` schema."""
+        local_addr = self._as_str(
+            row.get("LocalAddr", row.get("local_address", row.get("LocalAddress")))
+        )
+        remote_addr = self._as_str(
+            row.get(
+                "ForeignAddr",
+                row.get("remote_address", row.get("ForeignAddress", row.get("RemoteAddr"))),
+            )
+        )
+        created = convert_timestamp(
+            row.get("Created", row.get("created_time", row.get("CreateTime")))
+        )
+        return {
+            "protocol": self._as_str(row.get("Proto", row.get("protocol"))),
+            "local_address": local_addr,
+            "local_port": self._as_int(row.get("LocalPort", row.get("local_port"))),
+            "remote_address": remote_addr,
+            "remote_port": self._as_int(
+                row.get("ForeignPort", row.get("remote_port", row.get("RemotePort")))
+            ),
+            "state": self._as_str(row.get("State", row.get("state"))),
+            "pid": self._as_int(row.get("PID", row.get("pid"))),
+            "owner_process": self._as_str(
+                row.get("Owner", row.get("owner_process", row.get("Process")))
+            ),
+            "created_time": created.isoformat() if created is not None else None,
+            "is_external": self._is_external(remote_addr),
+        }
 
     @staticmethod
-    def _map_row(row: dict[str, Any]) -> dict[str, Any]:
-        """Map a Volatility row to the NETWORK_CONNECTION schema."""
-        return {
-            "protocol": row.get("Proto", row.get("protocol")),
-            "local_address": row.get("LocalAddr", row.get("local_address")),
-            "local_port": row.get("LocalPort", row.get("local_port")),
-            "remote_address": row.get("ForeignAddr", row.get("remote_address")),
-            "remote_port": row.get("ForeignPort", row.get("remote_port")),
-            "state": row.get("State", row.get("state")),
-            "pid": row.get("PID", row.get("pid")),
-            "owner_process": row.get("Owner", row.get("owner_process")),
-        }
+    def _is_external(remote_address: Optional[str]) -> bool:
+        """Return ``True`` when ``remote_address`` is outside private ranges.
+
+        Private ranges covered via ``ipaddress`` (RFC 1918 / ULA): ``10.0.0.0/8``,
+        ``172.16.0.0/12``, ``192.168.0.0/16``, plus loopback/link-local/unspecified.
+        """
+        host = NetworkArtefactParser._extract_host(remote_address)
+        if host is None:
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+            return False
+        if ip.is_multicast or ip.is_reserved:
+            return False
+        return True
+
+    @staticmethod
+    def _extract_host(address: Optional[str]) -> Optional[str]:
+        """Extract host from an address that may include a port."""
+        if address is None:
+            return None
+        text = str(address).strip()
+        if not text or text in {"*", "-", "N/A", "None"}:
+            return None
+        if text.startswith("["):
+            end = text.find("]")
+            if end > 1:
+                return text[1:end]
+        # IPv4 or hostname with optional :port (not IPv6)
+        if text.count(":") == 1:
+            return text.rsplit(":", 1)[0]
+        return text
+
+    @staticmethod
+    def _as_int(value: Any) -> Optional[int]:
+        """Best-effort integer coercion."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _as_str(value: Any) -> Optional[str]:
+        """Best-effort string coercion."""
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @staticmethod
+    def _await(coro: Any) -> Any:
+        """Run an async coroutine from sync ``_do_parse`` safely."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()

@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from dfat.core.enums import EvidenceType, PipelineStage
+from dfat.core.enums import EvidenceType, HashAlgorithm, PipelineStage
 from dfat.core.models.artefact import ArtefactSet
 from dfat.core.models.evaluation import BenchmarkResult, UsabilityResponse
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
 from dfat.core.models.pipeline import AuditEntry, PipelineState
 from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
-from dfat.core.enums import HashAlgorithm
+from dfat.pipeline.enums import JobStatus
 from dfat.services.analysis_service import AnalysisService
 from dfat.services.evaluation_service import EvaluationService
 from dfat.services.evidence_service import EvidenceService
@@ -133,7 +133,13 @@ async def test_analysis_service_status_and_parse(
     integrity = MagicMock()
     integrity.verify_integrity.return_value = True
     pipeline = MagicMock()
-    pipeline.run_parse_only.return_value = sample_artefact_set
+    completed_job = MagicMock()
+    completed_job.status = JobStatus.COMPLETED
+    completed_job.job_id = "job-1"
+    completed_job.error_message = None
+    pipeline.execute_pipeline = AsyncMock(return_value=completed_job)
+    pipeline.get_job_artefact_set.return_value = sample_artefact_set
+    pipeline._artefact_cache = {}
     state = PipelineState(
         case=sample_evidence_image.case,
         current_stage=PipelineStage.PARSING,
@@ -156,6 +162,7 @@ async def test_analysis_service_status_and_parse(
     assert artefacts.total_count == sample_artefact_set.total_count
     assert status.pipeline_id == state.pipeline_id
     artefact_repo.save.assert_awaited()
+    pipeline.execute_pipeline.assert_awaited()
 
 
 @pytest.mark.asyncio

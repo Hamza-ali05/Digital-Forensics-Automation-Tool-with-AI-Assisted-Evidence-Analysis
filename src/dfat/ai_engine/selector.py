@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from dfat.ai_engine.analyzer import LocalLLMClient
 from dfat.ai_engine.fallback.rule_based import RuleBasedAnalyzer
-from dfat.ai_engine.llm.client import LocalLLMClient
 from dfat.core.interfaces.analyzer import IArtefactAnalyzer
 
 

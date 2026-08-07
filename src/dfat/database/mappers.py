@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from dfat.case_management.enums import CaseStatus, CustodyAction, EvidenceStatus
 from dfat.core.enums import (
     ArtefactCategory,
     EvidenceType,
@@ -18,16 +19,28 @@ from dfat.core.enums import (
     SuspicionLevel,
 )
 from dfat.core.models.artefact import Artefact, RankedArtefact
+from dfat.core.models.case import Case, CaseInvestigator
 from dfat.core.models.evaluation import BenchmarkResult, UsabilityResponse
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage, MemoryDump
 from dfat.core.models.pipeline import AuditEntry
 from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
 from dfat.database.models.artefact_orm import ArtefactRecordORM
 from dfat.database.models.audit_orm import AuditLogRecordORM
+from dfat.database.models.case_orm import CaseInvestigatorORM, CaseORM
+from dfat.database.models.custody_orm import ChainOfCustodyORM
 from dfat.database.models.evaluation_orm import BenchmarkRecordORM, UsabilityRecordORM
 from dfat.database.models.evidence_orm import EvidenceRecordORM
+from dfat.database.models.evidence_status_orm import (
+    EvidenceMetadataORM,
+    EvidenceStatusHistoryORM,
+)
 from dfat.database.models.report_orm import ReportRecordORM
-
+from dfat.evidence_management.models import (
+    ChainOfCustodyRecord,
+    EvidenceMetadataRecord,
+    EvidenceStatusChange,
+    HashSet,
+)
 
 def _dumps(payload: Any) -> str:
     """Serialise a JSON-compatible payload to a text column value."""
@@ -402,4 +415,226 @@ def audit_domain_to_orm(
         hash_after=domain.hash_after,
         details=_dumps(domain.details),
         ip_address=ip_address,
+    )
+
+
+def case_orm_to_domain(
+    orm: CaseORM,
+    *,
+    evidence_ids: Optional[list[str]] = None,
+    investigator_usernames: Optional[dict[str, tuple[str, str]]] = None,
+) -> Case:
+    """Convert a case ORM row (with investigators) to a domain ``Case``.
+
+    Args:
+        orm: Case ORM record (investigators relationship may be loaded).
+        evidence_ids: Optional linked evidence IDs (from evidence_records).
+        investigator_usernames: Optional map of user_id → (username, full_name).
+
+    Returns:
+        Domain case model wrapping ``CaseMetadata``.
+    """
+    name_map = investigator_usernames or {}
+    investigators: list[CaseInvestigator] = []
+    for assignment in orm.investigators:
+        if not assignment.is_active:
+            continue
+        username, full_name = name_map.get(
+            assignment.user_id,
+            (assignment.user_id, assignment.user_id),
+        )
+        role = assignment.role if assignment.role in ("lead", "member") else "member"
+        investigators.append(
+            CaseInvestigator(
+                user_id=assignment.user_id,
+                username=username,
+                full_name=full_name,
+                role=role,  # type: ignore[arg-type]
+                assigned_at=assignment.assigned_at,
+            )
+        )
+    lead_name = "Unknown"
+    if orm.lead_investigator_id and orm.lead_investigator_id in name_map:
+        lead_name = name_map[orm.lead_investigator_id][1]
+    elif investigators:
+        leads = [inv for inv in investigators if inv.role == "lead"]
+        lead_name = leads[0].full_name if leads else investigators[0].full_name
+
+    metadata = CaseMetadata(
+        case_id=orm.id,
+        case_name=orm.case_name,
+        investigator=lead_name,
+        created_at=orm.created_at,
+        description=orm.description,
+    )
+    return Case(
+        metadata=metadata,
+        status=CaseStatus(orm.status),
+        investigators=investigators,
+        lead_investigator_id=orm.lead_investigator_id,
+        evidence_ids=list(evidence_ids or []),
+        opened_at=orm.opened_at,
+        closed_at=orm.closed_at,
+        archived_at=orm.archived_at,
+        closure_reason=orm.closure_reason,
+        notes=list(_loads(orm.notes, default=[]) or []),
+        tags=list(_loads(orm.tags, default=[]) or []),
+    )
+
+
+def case_domain_to_orm(
+    domain: Case,
+    *,
+    created_by_user_id: str,
+) -> CaseORM:
+    """Convert a domain ``Case`` to an ORM row (investigators not included).
+
+    Args:
+        domain: Domain case model.
+        created_by_user_id: User who created the case.
+
+    Returns:
+        Case ORM record (not yet persisted).
+    """
+    return CaseORM(
+        id=domain.case_id,
+        case_name=domain.case_name,
+        description=domain.metadata.description,
+        status=domain.status.value,
+        lead_investigator_id=domain.lead_investigator_id,
+        created_by_user_id=created_by_user_id,
+        opened_at=domain.opened_at,
+        closed_at=domain.closed_at,
+        archived_at=domain.archived_at,
+        closure_reason=domain.closure_reason,
+        notes=_dumps(domain.notes),
+        tags=_dumps(domain.tags),
+        created_at=domain.metadata.created_at,
+    )
+
+
+def custody_orm_to_domain(orm: ChainOfCustodyORM) -> ChainOfCustodyRecord:
+    """Convert a custody ORM row to a domain ``ChainOfCustodyRecord``."""
+    return ChainOfCustodyRecord(
+        record_id=orm.id,
+        evidence_id=orm.evidence_id,
+        action=CustodyAction(orm.action),
+        performed_by_user_id=orm.performed_by_user_id,
+        performed_by_name=orm.performed_by_name,
+        timestamp=orm.timestamp,
+        reason=orm.reason,
+        hash_at_action=orm.hash_at_action,
+        location=orm.location,
+        notes=orm.notes,
+        entry_number=orm.entry_number,
+    )
+
+
+def custody_domain_to_orm(
+    domain: ChainOfCustodyRecord,
+    *,
+    entry_number: int,
+) -> ChainOfCustodyORM:
+    """Convert a domain custody record to an ORM row.
+
+    Args:
+        domain: Domain custody record.
+        entry_number: Sequential custody entry number for the evidence.
+
+    Returns:
+        Custody ORM record (not yet persisted).
+    """
+    return ChainOfCustodyORM(
+        id=domain.record_id,
+        evidence_id=domain.evidence_id,
+        action=domain.action.value,
+        performed_by_user_id=domain.performed_by_user_id,
+        performed_by_name=domain.performed_by_name,
+        timestamp=domain.timestamp,
+        reason=domain.reason,
+        hash_at_action=domain.hash_at_action,
+        location=domain.location,
+        notes=domain.notes,
+        entry_number=entry_number,
+    )
+
+
+def evidence_metadata_orm_to_domain(orm: EvidenceMetadataORM) -> EvidenceMetadataRecord:
+    """Convert evidence metadata ORM to domain ``EvidenceMetadataRecord``."""
+    hash_set = HashSet(
+        md5=orm.hash_md5,
+        sha1=orm.hash_sha1,
+        sha256=orm.hash_sha256,
+        computed_at=orm.hash_computed_at,
+        file_size_bytes=orm.file_size_bytes,
+    )
+    extracted_at = orm.created_at if orm.created_at is not None else orm.hash_computed_at
+    return EvidenceMetadataRecord(
+        evidence_id=orm.evidence_id,
+        mime_type=orm.mime_type,
+        mime_detected_from=orm.mime_detected_from,
+        file_extension=orm.file_extension,
+        file_size_bytes=orm.file_size_bytes,
+        file_created_at=orm.file_created_at,
+        file_modified_at=orm.file_modified_at,
+        file_accessed_at=orm.file_accessed_at,
+        hash_set=hash_set,
+        is_valid_format=orm.is_valid_format,
+        validation_notes=list(_loads(orm.validation_notes, default=[]) or []),
+        extracted_at=extracted_at,
+    )
+
+
+def evidence_metadata_domain_to_orm(
+    domain: EvidenceMetadataRecord,
+) -> EvidenceMetadataORM:
+    """Convert domain evidence metadata to an ORM row."""
+    return EvidenceMetadataORM(
+        evidence_id=domain.evidence_id,
+        mime_type=domain.mime_type,
+        mime_detected_from=domain.mime_detected_from,
+        file_extension=domain.file_extension,
+        file_size_bytes=domain.file_size_bytes,
+        file_created_at=domain.file_created_at,
+        file_modified_at=domain.file_modified_at,
+        file_accessed_at=domain.file_accessed_at,
+        hash_md5=domain.hash_set.md5,
+        hash_sha1=domain.hash_set.sha1,
+        hash_sha256=domain.hash_set.sha256,
+        hash_computed_at=domain.hash_set.computed_at,
+        is_valid_format=domain.is_valid_format,
+        validation_notes=_dumps(domain.validation_notes),
+    )
+
+
+def evidence_status_orm_to_domain(
+    orm: EvidenceStatusHistoryORM,
+) -> EvidenceStatusChange:
+    """Convert a status-history ORM row to domain ``EvidenceStatusChange``."""
+    previous: Optional[EvidenceStatus] = None
+    if orm.previous_status:
+        previous = EvidenceStatus(orm.previous_status)
+    return EvidenceStatusChange(
+        evidence_id=orm.evidence_id,
+        previous_status=previous,
+        new_status=EvidenceStatus(orm.new_status),
+        changed_by_user_id=orm.changed_by_user_id,
+        changed_at=orm.changed_at,
+        reason=orm.reason,
+    )
+
+
+def evidence_status_domain_to_orm(
+    domain: EvidenceStatusChange,
+) -> EvidenceStatusHistoryORM:
+    """Convert domain evidence status change to an ORM row."""
+    return EvidenceStatusHistoryORM(
+        evidence_id=domain.evidence_id,
+        previous_status=(
+            domain.previous_status.value if domain.previous_status is not None else None
+        ),
+        new_status=domain.new_status.value,
+        changed_by_user_id=domain.changed_by_user_id,
+        changed_at=domain.changed_at,
+        reason=domain.reason,
     )

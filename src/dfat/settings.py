@@ -26,6 +26,7 @@ class EvidenceSettings(BaseModel):
     supported_memory_formats: set[str] = Field(
         default_factory=lambda: {".raw", ".vmem", ".dmp", ".mem"}
     )
+    max_evidence_size_gb: float = 100.0
 
 
 class ForensicEngineSettings(BaseModel):
@@ -45,6 +46,12 @@ class AIEngineSettings(BaseModel):
     max_tokens: int = 4096
     request_timeout_seconds: int = 120
     enable_fallback: bool = True
+    context_window: int = 8192
+    max_retries: int = 3
+    retry_delay_seconds: float = 2.0
+    cache_responses: bool = True
+    cache_ttl_seconds: int = 3600
+    max_input_artefacts: int = 500
 
 
 class ReportingSettings(BaseModel):
@@ -121,6 +128,20 @@ class ApiSettings(BaseModel):
     )
 
 
+class PipelineSettings(BaseModel):
+    """Five-stage forensic pipeline orchestration settings."""
+
+    max_concurrent_jobs: int = 1
+    stage_timeout_seconds: int = 600
+    parser_timeout_seconds: int = 300
+    max_artefacts_per_category: int = 10000
+    enable_artefact_correlation: bool = True
+    enable_timeline_generation: bool = True
+    enable_ioc_detection: bool = True
+    volatility_plugins_timeout: int = 300
+    enable_memory_registry: bool = True
+
+
 class DFATSettings(BaseSettings):
     """Top-level DFAT settings composed from YAML and environment variables.
 
@@ -148,6 +169,7 @@ class DFATSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
+    pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
 
 def _load_yaml_file(path: Path) -> dict[str, Any]:

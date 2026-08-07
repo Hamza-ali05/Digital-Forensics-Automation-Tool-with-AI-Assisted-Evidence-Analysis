@@ -13,3 +13,14 @@ DFAT ADRs capture research-oriented design choices for the DSR artefact.
 | [ADR-007](ADR-007-sqlalchemy-async-persistence.md) | SQLAlchemy Async Persistence |
 | [ADR-008](ADR-008-jwt-rbac.md) | JWT Authentication with RBAC |
 | [ADR-009](ADR-009-service-layer.md) | Service Layer Pattern |
+| [ADR-010](ADR-010-case-lifecycle-management.md) | Case Lifecycle Management |
+| [ADR-011](ADR-011-multi-algorithm-hashing.md) | Multi-Algorithm Hashing |
+| [ADR-012](ADR-012-chain-of-custody-immutability.md) | Chain-of-Custody Immutability |
+| [ADR-013](ADR-013-parser-lazy-imports.md) | Lazy Forensic Library Imports |
+| [ADR-014](ADR-014-graceful-parser-degradation.md) | Graceful Parser Degradation |
+| [ADR-015](ADR-015-artefact-raw-data-contracts.md) | Artefact `raw_data` Contracts |
+| [ADR-016](ADR-016-rule-based-triage-first.md) | Rule-Based Triage First |
+| [ADR-017](017-local-llm-only.md) | Local LLM Only (Prompt 5) |
+| [ADR-018](018-hallucination-mitigation.md) | Hallucination Mitigation |
+| [ADR-019](019-prompt-versioning.md) | Prompt Versioning |
+| [ADR-020](020-rule-based-triage-primary.md) | Rule-Based Triage Primary |

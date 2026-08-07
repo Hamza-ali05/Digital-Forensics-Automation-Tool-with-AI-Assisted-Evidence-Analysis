@@ -62,3 +62,18 @@ class ErrorResponse(BaseModel):
     timestamp: datetime
     details: dict[str, Any] = Field(default_factory=dict)
     request_id: Optional[str] = None
+
+
+class ParserInfoResponse(BaseModel):
+    """Single artefact parser availability entry."""
+
+    parser_name: str
+    available: bool
+    supported_evidence_types: list[str] = Field(default_factory=list)
+
+
+class ParserListResponse(BaseModel):
+    """List of registered artefact parsers."""
+
+    parsers: list[ParserInfoResponse] = Field(default_factory=list)
+    total: int = 0

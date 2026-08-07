@@ -5,25 +5,23 @@ Accepted
 
 ## Context
 ADR-004 established file-based repositories with the note that "the repository
-interface allows future migration." As the system grows to support multi-user
-access, audit persistence, and evaluation history, structured persistence
-becomes necessary.
+interface allows future migration." Multi-user access, evaluation history, and
+audit persistence require structured storage beyond JSON files on disk.
 
 ## Decision
-Adopt SQLAlchemy 2.0 async with SQLite for development and PostgreSQL as a
-production option. ORM models are separate from Pydantic domain models. The
-`IRepository` interface from Prompt 1 / Prompt 3 remains the contract — only
-the implementations change. Alembic manages schema versioning; migration files
-are immutable once committed.
+Adopt SQLAlchemy 2.0 async with SQLite for development and optional
+PostgreSQL for production. ORM models are separate from Pydantic domain models.
+The `IRepository` interface from Prompt 1 remains unchanged — only
+implementations evolve (async SQLAlchemy repos for the API path; file-based
+repos retained as fallbacks for the sync pipeline).
 
-Evidence **files** are never stored in the database — only metadata and
-integrity hashes.
+Alembic manages schema versioning; committed migration files are immutable.
+Evidence **files** are never stored in the database — only metadata, integrity
+hashes, users, sessions, and audit records.
 
 ## Consequences
-- Repository implementations must convert between ORM and domain models using
-  mappers.
-- Database sessions must be properly managed via the DI container.
-- Migration discipline is required: schema changes use new migration files,
-  never edits to committed revisions.
-- Default role IDs (`role-admin`, `role-investigator`, `role-analyst`,
-  `role-viewer`) are stable constants for the auth system.
+- A mapper layer (`database/mappers.py`) converts between ORM and domain models.
+- Database sessions are managed via the DI container (`DatabaseContainer`).
+- Migration discipline is enforced via Alembic (`001` initial schema, seed roles).
+- Stable role IDs (`role-admin`, `role-investigator`, `role-analyst`,
+  `role-viewer`) are constants shared with auth and migrations.

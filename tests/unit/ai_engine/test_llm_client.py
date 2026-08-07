@@ -1,4 +1,4 @@
-"""Unit tests for LocalLLMClient with mocked HTTP."""
+"""Unit tests for LegacyLocalLLMClient with mocked HTTP."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dfat.ai_engine.llm.client import LocalLLMClient
+from dfat.ai_engine.llm.client import LegacyLocalLLMClient
 from dfat.ai_engine.llm.config import LLMConfig
 from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
 from dfat.core.exceptions import LLMConnectionError
 from dfat.core.models.artefact import ArtefactSet
 
 
-def _client(mock_audit_logger: MagicMock) -> LocalLLMClient:
-    """Build a LocalLLMClient pointed at localhost."""
+def _client(mock_audit_logger: MagicMock) -> LegacyLocalLLMClient:
+    """Build a LegacyLocalLLMClient pointed at localhost."""
     config = LLMConfig(
         api_url="http://127.0.0.1:11434/api/generate",
         model="llama3",
@@ -22,7 +22,7 @@ def _client(mock_audit_logger: MagicMock) -> LocalLLMClient:
         max_tokens=256,
         request_timeout_seconds=5,
     )
-    return LocalLLMClient(config, mock_audit_logger, ForensicPromptTemplates())
+    return LegacyLocalLLMClient(config, mock_audit_logger, ForensicPromptTemplates())
 
 
 def test_is_available_returns_true_when_http_ok(mock_audit_logger: MagicMock) -> None:
@@ -68,7 +68,7 @@ def test_client_rejects_non_local_api_url(mock_audit_logger: MagicMock) -> None:
 
     # Act / Assert
     with pytest.raises(LLMConnectionError):
-        LocalLLMClient(config, mock_audit_logger, ForensicPromptTemplates())
+        LegacyLocalLLMClient(config, mock_audit_logger, ForensicPromptTemplates())
 
 
 def test_analyze_empty_set_returns_empty_list(mock_audit_logger: MagicMock) -> None:

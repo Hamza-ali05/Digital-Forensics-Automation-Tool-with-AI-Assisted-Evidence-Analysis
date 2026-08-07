@@ -39,14 +39,6 @@ def _to_status(state: PipelineState) -> AnalysisStatusResponse:
     )
 
 
-def _latest_pipeline_state(
-    orchestrator: PipelineOrchestrator,
-) -> PipelineState | None:
-    """Return the most recently recorded pipeline state, if any."""
-    states = list(orchestrator._pipeline_states.values())  # noqa: SLF001
-    return states[-1] if states else None
-
-
 @router.post(
     "",
     response_model=AnalysisStatusResponse,
@@ -61,9 +53,10 @@ async def run_analysis(
     """Run the analysis pipeline for registered evidence."""
     if body.mode == "parse-only":
         await analysis_service.run_parse_only(body.evidence_id, current_user.id)
-        state = _latest_pipeline_state(orchestrator)
-        if state is not None:
-            return _to_status(state)
+        # Latest job state is keyed by job_id; surface via artefact cache side-effect.
+        states = list(orchestrator._pipeline_states.values())  # noqa: SLF001
+        if states:
+            return _to_status(states[-1])
         return AnalysisStatusResponse(
             pipeline_id=body.evidence_id,
             current_stage="parsing",
@@ -73,9 +66,9 @@ async def run_analysis(
         )
 
     if body.mode == "triage-only":
-        state = orchestrator.start_pipeline(
+        state = await analysis_service.run_triage_only(
             body.evidence_id,
-            mode="triage-only",
+            current_user.id,
             use_fallback=body.use_fallback,
         )
         return _to_status(state)

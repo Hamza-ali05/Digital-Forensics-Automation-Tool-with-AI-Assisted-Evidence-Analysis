@@ -22,6 +22,11 @@ from dfat.auth.exceptions import (
     TokenExpiredError,
     TokenRevokedError,
 )
+from dfat.case_management.exceptions import (
+    CaseNotFoundError,
+    InvalidCaseTransitionError,
+    NoLeadInvestigatorError,
+)
 from dfat.core.exceptions import (
     AIEngineError,
     DFATError,
@@ -32,6 +37,21 @@ from dfat.core.exceptions import (
     ReportingError,
     UnsupportedFormatError,
 )
+from dfat.evidence_management.exceptions import (
+    EvidenceQuarantinedError,
+    EvidenceValidationError,
+    InvalidEvidenceTransitionError,
+    MIMETypeMismatchError,
+)
+from dfat.pipeline.exceptions import (
+    AllParsersFailedError,
+    ParserUnavailableError,
+    PipelineCancelledError,
+    PipelineJobNotFoundError,
+    PipelineStageError,
+    PipelineTimeoutError,
+)
+from dfat.pipeline.job_manager import JobCancellationError, JobNotFoundError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -57,6 +77,111 @@ class GlobalExceptionHandler:
             exc: EvidenceNotFoundError,
         ) -> JSONResponse:
             return GlobalExceptionHandler._error_response(request, exc, 404)
+
+        @app.exception_handler(CaseNotFoundError)
+        async def _case_not_found(
+            request: Request,
+            exc: CaseNotFoundError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 404)
+
+        @app.exception_handler(InvalidCaseTransitionError)
+        async def _invalid_case_transition(
+            request: Request,
+            exc: InvalidCaseTransitionError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 409)
+
+        @app.exception_handler(NoLeadInvestigatorError)
+        async def _no_lead_investigator(
+            request: Request,
+            exc: NoLeadInvestigatorError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 400)
+
+        @app.exception_handler(EvidenceValidationError)
+        async def _evidence_validation(
+            request: Request,
+            exc: EvidenceValidationError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 422)
+
+        @app.exception_handler(InvalidEvidenceTransitionError)
+        async def _invalid_evidence_transition(
+            request: Request,
+            exc: InvalidEvidenceTransitionError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 409)
+
+        @app.exception_handler(MIMETypeMismatchError)
+        async def _mime_mismatch(
+            request: Request,
+            exc: MIMETypeMismatchError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 422)
+
+        @app.exception_handler(EvidenceQuarantinedError)
+        async def _evidence_quarantined(
+            request: Request,
+            exc: EvidenceQuarantinedError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 403)
+
+        @app.exception_handler(PipelineJobNotFoundError)
+        async def _pipeline_job_not_found(
+            request: Request,
+            exc: PipelineJobNotFoundError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 404)
+
+        @app.exception_handler(JobNotFoundError)
+        async def _job_manager_not_found(
+            request: Request,
+            exc: JobNotFoundError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 404)
+
+        @app.exception_handler(JobCancellationError)
+        async def _job_cancellation(
+            request: Request,
+            exc: JobCancellationError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 409)
+
+        @app.exception_handler(PipelineTimeoutError)
+        async def _pipeline_timeout(
+            request: Request,
+            exc: PipelineTimeoutError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 504)
+
+        @app.exception_handler(PipelineCancelledError)
+        async def _pipeline_cancelled(
+            request: Request,
+            exc: PipelineCancelledError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 409)
+
+        @app.exception_handler(PipelineStageError)
+        async def _pipeline_stage(
+            request: Request,
+            exc: PipelineStageError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 500)
+
+        @app.exception_handler(ParserUnavailableError)
+        async def _parser_unavailable(
+            request: Request,
+            exc: ParserUnavailableError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 503)
+
+        @app.exception_handler(AllParsersFailedError)
+        async def _all_parsers_failed(
+            request: Request,
+            exc: AllParsersFailedError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 422)
 
         @app.exception_handler(IntegrityVerificationError)
         async def _integrity(

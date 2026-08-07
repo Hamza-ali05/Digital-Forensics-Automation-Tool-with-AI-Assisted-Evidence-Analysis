@@ -11,26 +11,50 @@ dist/
 build/
 .venv/
 venv/
-.env
+env/
 
-# Tooling caches
+# Environment / secrets (keep .env.example tracked)
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Tooling caches & coverage
 .mypy_cache/
 .pytest_cache/
 .pytest_tmp/
 .ruff_cache/
+.cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 .tox/
 .nox/
 .hypothesis/
+.dmypy.json
+dmypy.json
 
 # IDE / OS
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+tmp/
+temp/
 
 # Runtime / forensic data
 data/evidence/*
@@ -48,17 +72,21 @@ data/questionnaire/responses/*
 *.dd
 *.raw
 *.E01
+*.e01
 *.vmem
-
-# Secrets
-*.pem
-*.key
-credentials.json
+*.mem
+*.aff
+*.vmdk
+*.vhd
+*.vhdx
 
 # Local SQLite databases
 *.db
 *.db-journal
 *.db-wal
+*.sqlite
+*.sqlite3
 
-# Scaffold temp
+# Scaffold / one-off verify scripts
 _prompt1_scaffold.py
+_verify_*.py

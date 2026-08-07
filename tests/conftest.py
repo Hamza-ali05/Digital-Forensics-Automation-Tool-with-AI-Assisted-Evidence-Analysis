@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, AsyncIterator
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -17,9 +17,13 @@ from dfat.auth.jwt_handler import JWTHandler
 from dfat.auth.password import PasswordHasher
 from dfat.core.enums import ArtefactCategory, EvidenceType, HashAlgorithm, SuspicionLevel
 from dfat.core.models.artefact import Artefact, ArtefactSet, RankedArtefact
+from dfat.core.models.case import Case, CaseInvestigator
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
+from dfat.case_management.enums import CaseStatus, CustodyAction
+from dfat.evidence_management.models import ChainOfCustodyRecord, HashSet
 from dfat.database.engine import DatabaseEngine
 from dfat.database.models.user import RoleORM, UserORM
+from dfat.database.repositories.case_repo import SQLAlchemyCaseRepository
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
 from dfat.infrastructure.storage.local_storage import LocalFileStorage
 from dfat.settings import AuthSettings
@@ -31,6 +35,10 @@ TEST_ANALYST_USERNAME = "analyst"
 TEST_ANALYST_PASSWORD = "AnalystPass12!"
 TEST_VIEWER_USERNAME = "viewer"
 TEST_VIEWER_PASSWORD = "ViewerPass123!"
+TEST_INVESTIGATOR_USERNAME = "investigator"
+TEST_INVESTIGATOR_PASSWORD = "InvestPass123!"
+
+SAMPLE_EVIDENCE_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_evidence"
 
 _ROLE_SEEDS: list[dict[str, Any]] = [
     {
@@ -194,6 +202,93 @@ def mock_llm_client() -> MagicMock:
 
 
 @pytest.fixture
+def mock_llm_response() -> str:
+    """Return valid classification JSON for mocked Ollama responses."""
+    return (
+        '[{"artefact_id":"art-1","suspicion_level":"HIGH",'
+        '"reasoning":"RWX region with MZ header",'
+        '"ioc_indicators":["MZ header"]}]'
+    )
+
+
+@pytest.fixture
+def mock_ollama_client(mock_llm_response: str) -> MagicMock:
+    """Return a mocked OllamaClient that never calls a real LLM."""
+    client = MagicMock()
+    client.generate = AsyncMock(
+        return_value=MagicMock(
+            text=mock_llm_response,
+            model="llama3",
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+    )
+    client.chat = AsyncMock(
+        return_value=MagicMock(
+            text="Artefact art-1 is the primary finding.",
+            model="llama3",
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+    )
+    client.stream = AsyncMock()
+    return client
+
+
+@pytest.fixture
+def mock_artefact_set_for_ai() -> ArtefactSet:
+    """Return ~30 artefacts across categories for AI batching tests."""
+    evidence_id = "ev-ai-batch-001"
+    categories = list(ArtefactCategory)
+    artefacts: list[Artefact] = []
+    for index in range(30):
+        category = categories[index % len(categories)]
+        artefacts.append(
+            Artefact(
+                artefact_id=f"art-ai-{index:03d}",
+                category=category,
+                source_evidence_id=evidence_id,
+                raw_data={
+                    "name": f"sample-{index}",
+                    "index": index,
+                    "category": category.value,
+                },
+            )
+        )
+    return ArtefactSet(
+        evidence_id=evidence_id,
+        artefacts=artefacts,
+        categories_present=sorted({item.category for item in artefacts}, key=lambda c: c.value),
+    )
+
+
+@pytest.fixture
+def mock_ranked_artefacts(
+    mock_artefact_set_for_ai: ArtefactSet,
+) -> list[RankedArtefact]:
+    """Return ranked artefacts derived from ``mock_artefact_set_for_ai``."""
+    levels = [
+        SuspicionLevel.CRITICAL,
+        SuspicionLevel.HIGH,
+        SuspicionLevel.MEDIUM,
+        SuspicionLevel.LOW,
+        SuspicionLevel.INFORMATIONAL,
+    ]
+    ranked: list[RankedArtefact] = []
+    for index, artefact in enumerate(mock_artefact_set_for_ai.artefacts):
+        level = levels[index % len(levels)]
+        ranked.append(
+            RankedArtefact(
+                **artefact.model_dump(),
+                suspicion_level=level,
+                relevance_score=round(1.0 - (index % 5) * 0.15, 2),
+                classification_reasoning=f"Mock ranking for {artefact.artefact_id}",
+            )
+        )
+    return ranked
+
+
+@pytest.fixture
 def mock_storage(tmp_path: Path) -> LocalFileStorage:
     """Return LocalFileStorage rooted at a temporary directory."""
     return LocalFileStorage(base_dir=tmp_path)
@@ -251,6 +346,7 @@ async def seeded_db(db_engine: DatabaseEngine) -> dict[str, Any]:
     admin_id = "user-admin-00000000-0000-0000-0000-000000000001"
     analyst_id = "user-analyst-00000000-0000-0000-0000-000000000002"
     viewer_id = "user-viewer-00000000-0000-0000-0000-000000000003"
+    investigator_id = "user-investigator-00000000-0000-0000-0000-000000000004"
     now = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
 
     async with db_engine.session_factory() as session:
@@ -311,6 +407,21 @@ async def seeded_db(db_engine: DatabaseEngine) -> dict[str, Any]:
                 updated_at=now,
             )
         )
+        session.add(
+            UserORM(
+                id=investigator_id,
+                username=TEST_INVESTIGATOR_USERNAME,
+                email="investigator@example.com",
+                hashed_password=hasher.hash_password(TEST_INVESTIGATOR_PASSWORD),
+                full_name="Test Investigator",
+                role_id="role-investigator",
+                is_active=True,
+                is_locked=False,
+                failed_login_attempts=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
         await session.commit()
 
     return {
@@ -318,6 +429,7 @@ async def seeded_db(db_engine: DatabaseEngine) -> dict[str, Any]:
             "admin": admin_id,
             "analyst": analyst_id,
             "viewer": viewer_id,
+            "investigator": investigator_id,
         },
         "role_ids": {
             "admin": "role-admin",
@@ -329,6 +441,7 @@ async def seeded_db(db_engine: DatabaseEngine) -> dict[str, Any]:
             "admin": (TEST_ADMIN_USERNAME, TEST_ADMIN_PASSWORD),
             "analyst": (TEST_ANALYST_USERNAME, TEST_ANALYST_PASSWORD),
             "viewer": (TEST_VIEWER_USERNAME, TEST_VIEWER_PASSWORD),
+            "investigator": (TEST_INVESTIGATOR_USERNAME, TEST_INVESTIGATOR_PASSWORD),
         },
     }
 
@@ -436,6 +549,7 @@ async def app_client(
     client.admin_token = _make_token(jwt_handler, seeded_db, "admin")  # type: ignore[attr-defined]
     client.analyst_token = _make_token(jwt_handler, seeded_db, "analyst")  # type: ignore[attr-defined]
     client.viewer_token = _make_token(jwt_handler, seeded_db, "viewer")  # type: ignore[attr-defined]
+    client.investigator_token = _make_token(jwt_handler, seeded_db, "investigator")  # type: ignore[attr-defined]
     client.seeded_db = seeded_db  # type: ignore[attr-defined]
     try:
         yield client
@@ -449,3 +563,273 @@ async def app_client(
         container.repositories.file_evidence_repo.reset_override()
         container.repositories.file_artefact_repo.reset_override()
         container.repositories.file_report_repo.reset_override()
+
+
+# ---------------------------------------------------------------------------
+# Prompt 3 fixtures — case / evidence management
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_case(sample_case_metadata: CaseMetadata) -> Case:
+    """Return a deterministic Case wrapping CaseMetadata."""
+    return Case(
+        metadata=sample_case_metadata,
+        status=CaseStatus.CREATED,
+        investigators=[],
+        lead_investigator_id=None,
+        evidence_ids=[],
+        notes=[],
+        tags=["fixture"],
+    )
+
+
+@pytest.fixture
+def sample_hash_set() -> HashSet:
+    """Return a deterministic multi-algorithm hash set."""
+    return HashSet(
+        md5="0" * 32,
+        sha1="1" * 40,
+        sha256="a" * 64,
+        computed_at=datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+        file_size_bytes=1024,
+    )
+
+
+@pytest.fixture
+def sample_custody_record(sample_hash_set: HashSet) -> ChainOfCustodyRecord:
+    """Return a deterministic ACQUIRED custody record."""
+    return ChainOfCustodyRecord(
+        record_id="custody-00000000-0000-0000-0000-000000000001",
+        evidence_id="ev-00000000-0000-0000-0000-000000000001",
+        action=CustodyAction.ACQUIRED,
+        performed_by_user_id="user-investigator-00000000-0000-0000-0000-000000000004",
+        performed_by_name="Test Investigator",
+        timestamp=datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+        reason="Initial acquisition",
+        hash_at_action=sample_hash_set.sha256,
+        entry_number=1,
+    )
+
+
+@pytest.fixture
+def temp_evidence_file(tmp_path: Path) -> Path:
+    """Create a deterministic 1 KiB temporary evidence file."""
+    path = tmp_path / "temp_evidence.dd"
+    path.write_bytes(b"\x00" * 1024)
+    return path
+
+
+@pytest.fixture
+async def seeded_case_db(
+    db_engine: DatabaseEngine,
+    seeded_db: dict[str, Any],
+    sample_case_metadata: CaseMetadata,
+) -> dict[str, Any]:
+    """Seed a case with a lead investigator into the test database."""
+    case_repo = SQLAlchemyCaseRepository(db_engine.session_factory)
+    investigator_id = seeded_db["user_ids"]["investigator"]
+    case = Case(
+        metadata=CaseMetadata(
+            case_id=sample_case_metadata.case_id,
+            case_name=sample_case_metadata.case_name,
+            investigator="Test Investigator",
+            created_at=sample_case_metadata.created_at,
+            description=sample_case_metadata.description,
+        ),
+        status=CaseStatus.CREATED,
+        lead_investigator_id=investigator_id,
+        investigators=[
+            CaseInvestigator(
+                user_id=investigator_id,
+                username=TEST_INVESTIGATOR_USERNAME,
+                full_name="Test Investigator",
+                role="lead",
+                assigned_at=datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+            )
+        ],
+    )
+    await case_repo.save(case, created_by_user_id=investigator_id)
+    loaded = await case_repo.get(case.case_id)
+    assert loaded is not None
+    return {
+        **seeded_db,
+        "case_id": loaded.case_id,
+        "case": loaded,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Prompt 4 fixtures — parsers, pipeline context, volatility
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_artefact_set() -> ArtefactSet:
+    """Return 50 artefacts evenly spanning all 7 ArtefactCategory values."""
+    evidence_id = "ev-mock-artefact-set-0001"
+    categories = list(ArtefactCategory)
+    artefacts: list[Artefact] = []
+    for index in range(50):
+        category = categories[index % len(categories)]
+        artefacts.append(
+            Artefact(
+                artefact_id=f"art-mock-{index:03d}",
+                category=category,
+                source_evidence_id=evidence_id,
+                raw_data=_synthetic_raw_data(category, index),
+                metadata={"fixture": "mock_artefact_set", "index": index},
+            )
+        )
+    present = sorted({item.category for item in artefacts}, key=lambda c: c.value)
+    return ArtefactSet(
+        evidence_id=evidence_id,
+        artefacts=artefacts,
+        categories_present=present,
+    )
+
+
+def _synthetic_raw_data(category: ArtefactCategory, index: int) -> dict[str, Any]:
+    """Build minimal category-valid raw_data for fixture artefacts."""
+    if category is ArtefactCategory.FILESYSTEM_METADATA:
+        return {
+            "filename": f"file{index}.dat",
+            "path": f"/path/file{index}.dat",
+            "size": index,
+            "is_deleted": False,
+            "file_type": "file",
+        }
+    if category is ArtefactCategory.REGISTRY_KEY:
+        return {
+            "hive_name": "SOFTWARE",
+            "key_path": rf"Key\Value{index}",
+            "value_name": f"v{index}",
+            "value_data": f"data{index}",
+            "value_type": "RegSZ",
+        }
+    if category is ArtefactCategory.BROWSER_HISTORY:
+        return {
+            "url": f"https://example.com/{index}",
+            "title": f"Page {index}",
+            "visit_count": index + 1,
+            "browser_type": "chrome",
+        }
+    if category is ArtefactCategory.EVENT_LOG:
+        return {
+            "event_id": 4624 + (index % 10),
+            "message": f"event {index}",
+            "is_security_relevant": index % 2 == 0,
+        }
+    if category is ArtefactCategory.RUNNING_PROCESS:
+        return {"pid": 1000 + index, "name": f"proc{index}.exe"}
+    if category is ArtefactCategory.NETWORK_CONNECTION:
+        return {
+            "protocol": "TCP",
+            "local_address": "10.0.0.1",
+            "remote_address": "8.8.8.8",
+            "is_external": True,
+            "pid": 1000 + index,
+        }
+    return {
+        "pid": 2000 + index,
+        "process_name": f"inj{index}.exe",
+        "vad_start": hex(index),
+        "protection": "PAGE_EXECUTE_READWRITE",
+        "suspicious_indicators": ["MZ header"] if index % 2 == 0 else [],
+    }
+
+
+@pytest.fixture
+def mock_parser_registry(mock_artefact_set: ArtefactSet) -> Any:
+    """Return a ParserRegistry populated with synthetic stub parsers."""
+    from dfat.core.interfaces.parser import IArtefactParser
+    from dfat.pipeline.parser_registry import ParserRegistry
+
+    class _SyntheticParser(IArtefactParser):
+        def __init__(self, name: str, category: ArtefactCategory) -> None:
+            self._name = name
+            self._category = category
+
+        @property
+        def parser_name(self) -> str:
+            return self._name
+
+        def supported_categories(self) -> list[ArtefactCategory]:
+            return [self._category]
+
+        def supported_evidence_types(self) -> list[EvidenceType]:
+            if self._category in {
+                ArtefactCategory.RUNNING_PROCESS,
+                ArtefactCategory.NETWORK_CONNECTION,
+                ArtefactCategory.INJECTED_CODE,
+            }:
+                return [EvidenceType.MEMORY_DUMP]
+            return [EvidenceType.DISK_IMAGE]
+
+        def parse(self, evidence: EvidenceImage) -> ArtefactSet:
+            subset = [
+                item
+                for item in mock_artefact_set.artefacts
+                if item.category is self._category
+            ][:3]
+            return ArtefactSet(
+                evidence_id=evidence.evidence_id,
+                artefacts=subset,
+                categories_present=[self._category] if subset else [],
+            )
+
+        def is_available(self) -> bool:
+            return True
+
+    registry = ParserRegistry()
+    mapping = [
+        ("FileSystemParser", ArtefactCategory.FILESYSTEM_METADATA),
+        ("RegistryParser", ArtefactCategory.REGISTRY_KEY),
+        ("BrowserHistoryParser", ArtefactCategory.BROWSER_HISTORY),
+        ("EventLogParser", ArtefactCategory.EVENT_LOG),
+        ("ProcessListParser", ArtefactCategory.RUNNING_PROCESS),
+        ("NetworkArtefactParser", ArtefactCategory.NETWORK_CONNECTION),
+        ("CodeInjectionParser", ArtefactCategory.INJECTED_CODE),
+    ]
+    for name, category in mapping:
+        registry.register(_SyntheticParser(name, category))
+    return registry
+
+
+@pytest.fixture
+def mock_pipeline_context(
+    sample_evidence_image: EvidenceImage,
+    mock_artefact_set: ArtefactSet,
+) -> Any:
+    """Return a PipelineContext seeded with job, evidence, and artefacts."""
+    from dfat.pipeline.models import PipelineJob
+    from dfat.pipeline.stage_interface import PipelineContext
+
+    job = PipelineJob(
+        evidence_id=sample_evidence_image.evidence_id,
+        case_id=sample_evidence_image.case.case_id,
+        user_id="user-fixture-1",
+        mode="full",
+    )
+    return PipelineContext(
+        job=job,
+        evidence=sample_evidence_image,
+        artefact_set=mock_artefact_set,
+        metadata={
+            "case": sample_evidence_image.case,
+            "case_id": sample_evidence_image.case.case_id,
+        },
+    )
+
+
+@pytest.fixture
+def mock_volatility_runner(mock_audit_logger: MagicMock) -> MagicMock:
+    """Return a mocked VolatilityRunner that never touches volatility3."""
+    runner = MagicMock()
+    runner.is_available.return_value = True
+    runner.run_plugin.return_value = [
+        {"PID": 4, "PPID": 0, "ImageFileName": "System"},
+        {"PID": 100, "PPID": 4, "ImageFileName": "svchost.exe"},
+    ]
+    runner._audit_logger = mock_audit_logger
+    return runner

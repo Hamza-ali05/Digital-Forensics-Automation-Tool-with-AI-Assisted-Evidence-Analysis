@@ -26,9 +26,37 @@ bash scripts/setup_dev.sh
 ## Quickstart
 
 ```bash
-# Placeholder — pipeline CLI and API are implemented in later prompts.
 python -m dfat
 make run-api
+# API docs: http://127.0.0.1:8000/docs
+```
+
+## Pipeline
+
+DFAT runs a five-stage forensic pipeline: **Acquisition → Parsing → AI Triage →
+Reporting → Evaluation**. Jobs are submitted asynchronously via the API and can
+run in `full`, `parse-only`, or `triage-only` mode. Parsers degrade gracefully
+when optional forensic libraries are missing; triage prefers rule-based scoring
+with optional local LLM enrichment.
+
+```bash
+# Example: submit a full pipeline job (requires JWT)
+curl -X POST http://127.0.0.1:8000/api/v1/pipeline/run \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"evidence_id":"<id>","case_id":"<id>","mode":"full"}'
+```
+
+| Doc | Description |
+|-----|-------------|
+| [`docs/architecture/PIPELINE.md`](docs/architecture/PIPELINE.md) | Stages, parsers, `raw_data` contracts, config, errors |
+| [`docs/api/PIPELINE_API.md`](docs/api/PIPELINE_API.md) | HTTP endpoints with request/response examples |
+| [ADR-013–016](docs/architecture/adr/README.md) | Lazy imports, degradation, contracts, rule-first triage |
+
+```bash
+make test-pipeline   # pipeline + processing unit/integration tests
+make test-parsers    # artefact parser unit tests
+make test-prompt4    # Prompt 4 suite aggregate
 ```
 
 ## Project Structure
@@ -36,6 +64,8 @@ make run-api
 ```
 dfat/
 ├── src/dfat/           # Application packages (domain, engines, API, infrastructure)
+│   ├── pipeline/       # Orchestrator, stages, job/progress models
+│   └── forensic_engine/parsers/  # Disk + memory artefact parsers
 ├── tests/              # Unit, integration, and fixture data
 ├── config/             # Hierarchical YAML configuration
 ├── docs/               # Architecture, API, user, and development docs

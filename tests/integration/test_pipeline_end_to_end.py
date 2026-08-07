@@ -3,21 +3,84 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
-from dfat.ai_engine.fallback.rule_based import RuleBasedAnalyzer
-from dfat.core.enums import EvidenceType, HashAlgorithm
-from dfat.core.models.artefact import ArtefactSet
+import pytest
+
+from dfat.core.enums import EvidenceType, HashAlgorithm, PipelineStage, SuspicionLevel
+from dfat.core.models.artefact import ArtefactSet, RankedArtefact
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
+from dfat.core.models.pipeline import StageResult
+from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
 from dfat.evaluation.benchmark.comparator import BenchmarkComparator
 from dfat.evaluation.benchmark.ground_truth import GroundTruthLoader
 from dfat.evaluation.benchmark.metrics import MetricsCalculator
-from dfat.forensic_engine.normalizer import ArtefactNormalizer
-from dfat.forensic_engine.orchestrator import ForensicOrchestrator
-from dfat.pipeline import PipelineOrchestrator
-from dfat.reporting.json_layer import StructuredJSONExporter
-from dfat.reporting.narrative import NarrativeAssembler
-from dfat.reporting.report_builder import DualOutputReportBuilder
+from dfat.pipeline.enums import JobStatus
+from dfat.pipeline.job_manager import JobManager
+from dfat.pipeline.job_runner import JobRunner
+from dfat.pipeline.orchestrator import PipelineOrchestrator
+from dfat.pipeline.pipeline_logger import PipelineLogger
+from dfat.pipeline.progress_tracker import ProgressTracker
+from dfat.pipeline.stage_interface import IPipelineStage, PipelineContext
+from dfat.pipeline.stage_registry import StageRegistry
+from dfat.settings import DFATSettings
+
+
+class _FakeStage(IPipelineStage):
+    """Minimal stage stub that records success."""
+
+    def __init__(self, stage: PipelineStage, hook=None) -> None:
+        self._stage = stage
+        self._hook = hook
+
+    @property
+    def stage_name(self) -> PipelineStage:
+        return self._stage
+
+    @property
+    def description(self) -> str:
+        return f"Fake {self._stage.value} stage"
+
+    async def validate_preconditions(self, context: PipelineContext) -> bool:
+        return True
+
+    async def execute(self, context: PipelineContext) -> StageResult:
+        if self._hook is not None:
+            self._hook(context)
+        return StageResult(
+            stage=self._stage,
+            success=True,
+            duration_seconds=0.01,
+            output_data={"ok": True},
+            errors=[],
+        )
+
+
+def _report_for(evidence: EvidenceImage, case: CaseMetadata) -> ForensicReport:
+    """Build a minimal dual-output report for tests."""
+    json_layer = JSONReport(
+        evidence_id=evidence.evidence_id,
+        artefact_data=[],
+        integrity_hash="b" * 64,
+    )
+    narrative = NarrativeReport(
+        evidence_id=evidence.evidence_id,
+        summary_text="Integration test summary",
+        llm_model_used="test",
+    )
+    return ForensicReport(
+        case=case,
+        json_report=json_layer,
+        narrative_report=narrative,
+        stage_timings={
+            "acquisition_s": 0.1,
+            "parsing_s": 0.1,
+            "triage_s": 0.1,
+            "reporting_s": 0.1,
+            "evaluation_s": 0.0,
+        },
+        pipeline_duration_seconds=0.4,
+    )
 
 
 def _pipeline(
@@ -25,8 +88,8 @@ def _pipeline(
     sample_case_metadata: CaseMetadata,
     mock_audit_logger: MagicMock,
     artefact_set: ArtefactSet,
-) -> tuple[PipelineOrchestrator, Path]:
-    """Build a PipelineOrchestrator with mocked forensic acquisition/parsing."""
+) -> tuple[PipelineOrchestrator, EvidenceImage]:
+    """Build a PipelineOrchestrator with stubbed stages and repos."""
     evidence_path = tmp_path / "sample.dd"
     evidence_path.write_bytes(b"DFAT-E2E")
     evidence = EvidenceImage(
@@ -39,88 +102,104 @@ def _pipeline(
         case=sample_case_metadata,
     )
 
-    disk_handler = MagicMock()
-    disk_handler.load_image.return_value = evidence
-    parser = MagicMock()
-    parser.parser_name = "MockParser"
-    parser.supported_evidence_types.return_value = [EvidenceType.DISK_IMAGE]
-    parser.parse.return_value = artefact_set
+    def _acquisition_hook(context: PipelineContext) -> None:
+        context.evidence = evidence
 
-    integrity = MagicMock()
-    integrity.verify_integrity.return_value = True
-    forensic = ForensicOrchestrator(
-        parsers=[parser],  # type: ignore[arg-type]
-        normalizer=ArtefactNormalizer(),
-        integrity_checker=integrity,
-        disk_handler=disk_handler,
-        memory_handler=MagicMock(),
-        audit_logger=mock_audit_logger,
-    )
+    def _parsing_hook(context: PipelineContext) -> None:
+        context.artefact_set = artefact_set
 
-    schema = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "dfat"
-        / "reporting"
-        / "templates"
-        / "report_schema.json"
-    )
-    report_builder = DualOutputReportBuilder(
-        json_exporter=StructuredJSONExporter(schema, HashAlgorithm.SHA256),
-        narrative_assembler=NarrativeAssembler(schema.parent),
-        report_repo=MagicMock(),
-        audit_logger=mock_audit_logger,
-    )
+    def _triage_hook(context: PipelineContext) -> None:
+        assert context.artefact_set is not None
+        context.ranked_artefacts = [
+            RankedArtefact(
+                **item.model_dump(),
+                suspicion_level=SuspicionLevel.MEDIUM,
+                relevance_score=0.5,
+                classification_reasoning="test",
+            )
+            for item in context.artefact_set.artefacts
+        ]
+        context.summary_text = "triaged"
 
-    llm = MagicMock()
-    llm.analyzer_name = "MockLLM"
-    llm.is_available.return_value = False
-    llm.analyze.side_effect = RuntimeError("LLM unavailable")
-    llm.summarize.side_effect = RuntimeError("LLM unavailable")
+    def _reporting_hook(context: PipelineContext) -> None:
+        context.report = _report_for(evidence, sample_case_metadata)
+
+    registry = StageRegistry()
+    registry.register(_FakeStage(PipelineStage.ACQUISITION, _acquisition_hook))
+    registry.register(_FakeStage(PipelineStage.PARSING, _parsing_hook))
+    registry.register(_FakeStage(PipelineStage.AI_TRIAGE, _triage_hook))
+    registry.register(_FakeStage(PipelineStage.REPORTING, _reporting_hook))
+    registry.register(_FakeStage(PipelineStage.EVALUATION))
+
+    audit = AsyncMock()
+    audit.log_action = AsyncMock()
+    job_manager = JobManager(audit_service=audit, max_concurrent=2)
+    job_runner = JobRunner(
+        job_manager=job_manager,
+        stage_registry=registry,
+        audit_service=audit,
+    )
+    progress = ProgressTracker()
+    pipeline_logger = PipelineLogger(audit_service=audit, app_logger=MagicMock())
+
+    evidence_repo = AsyncMock()
+    evidence_repo.get.return_value = evidence
+    case_repo = AsyncMock()
+    case_repo.get.return_value = None
+
+    evidence_mgmt = AsyncMock()
+    custody = AsyncMock()
+    custody.record_analysis = AsyncMock()
 
     orchestrator = PipelineOrchestrator(
-        forensic_orchestrator=forensic,
-        analyzer=llm,
-        fallback_analyzer=RuleBasedAnalyzer(),
-        report_builder=report_builder,
-        evidence_repo=MagicMock(),
-        report_repo=MagicMock(),
+        stage_registry=registry,
+        job_manager=job_manager,
+        job_runner=job_runner,
+        progress_tracker=progress,
+        pipeline_logger=pipeline_logger,
+        evidence_repo=evidence_repo,
+        case_repo=case_repo,
+        audit_service=audit,
+        settings=DFATSettings(),
+        evidence_management_service=evidence_mgmt,
+        custody_service=custody,
         ground_truth_loader=GroundTruthLoader(tmp_path),
         benchmark_comparator=BenchmarkComparator(
             MetricsCalculator(),
             mock_audit_logger,
             {"precision_min": 0.0, "recall_min": 0.0, "f1_min": 0.0},
         ),
-        audit_logger=mock_audit_logger,
     )
-    return orchestrator, evidence_path
+    return orchestrator, evidence
 
 
-def test_run_full_pipeline_completes_all_stages_with_fallback(
+@pytest.mark.asyncio
+async def test_execute_pipeline_completes_all_stages(
     tmp_path: Path,
     sample_case_metadata: CaseMetadata,
     sample_artefact_set: ArtefactSet,
     mock_audit_logger: MagicMock,
 ) -> None:
-    """Verify full pipeline runs all stages and falls back when LLM fails."""
-    # Arrange
-    orchestrator, evidence_path = _pipeline(
+    """Verify full pipeline runs all stages via the job runner."""
+    orchestrator, evidence = _pipeline(
         tmp_path,
         sample_case_metadata,
         mock_audit_logger,
         sample_artefact_set,
     )
 
-    # Act
-    report = orchestrator.run_full_pipeline(
-        evidence_path,
-        sample_case_metadata,
+    job = await orchestrator.execute_pipeline(
+        evidence_id=evidence.evidence_id,
+        case_id=sample_case_metadata.case_id,
+        user_id="user-1",
+        mode="full",
         use_fallback=True,
     )
 
-    # Assert
+    assert job.status is JobStatus.COMPLETED
+    report = orchestrator.get_job_report(job.job_id)
+    assert report is not None
     assert report.report_id
-    assert report.json_report.integrity_hash
     assert report.narrative_report.summary_text
     assert "acquisition_s" in report.stage_timings
     assert "parsing_s" in report.stage_timings
@@ -128,78 +207,88 @@ def test_run_full_pipeline_completes_all_stages_with_fallback(
     assert "reporting_s" in report.stage_timings
 
 
-def test_run_parse_only_returns_artefact_set(
+@pytest.mark.asyncio
+async def test_execute_pipeline_parse_only_returns_artefact_set(
     tmp_path: Path,
     sample_case_metadata: CaseMetadata,
     sample_artefact_set: ArtefactSet,
     mock_audit_logger: MagicMock,
 ) -> None:
     """Verify parse-only mode returns a normalised artefact set."""
-    # Arrange
-    orchestrator, evidence_path = _pipeline(
+    orchestrator, evidence = _pipeline(
         tmp_path,
         sample_case_metadata,
         mock_audit_logger,
         sample_artefact_set,
     )
 
-    # Act
-    artefact_set = orchestrator.run_parse_only(evidence_path, sample_case_metadata)
+    job = await orchestrator.execute_pipeline(
+        evidence_id=evidence.evidence_id,
+        case_id=sample_case_metadata.case_id,
+        user_id="user-1",
+        mode="parse-only",
+    )
 
-    # Assert
+    assert job.status is JobStatus.COMPLETED
+    artefact_set = orchestrator.get_job_artefact_set(job.job_id)
+    assert artefact_set is not None
     assert artefact_set.total_count == sample_artefact_set.total_count
 
 
-def test_run_triage_only_ranks_artefacts(
+@pytest.mark.asyncio
+async def test_execute_pipeline_triage_only_uses_cached_artefacts(
     tmp_path: Path,
     sample_case_metadata: CaseMetadata,
     sample_artefact_set: ArtefactSet,
     mock_audit_logger: MagicMock,
 ) -> None:
-    """Verify triage-only mode returns ranked artefacts via fallback."""
-    # Arrange
-    orchestrator, _ = _pipeline(
+    """Verify triage-only mode ranks previously cached artefacts."""
+    orchestrator, evidence = _pipeline(
         tmp_path,
         sample_case_metadata,
         mock_audit_logger,
         sample_artefact_set,
     )
+    orchestrator._artefact_cache[evidence.evidence_id] = sample_artefact_set  # noqa: SLF001
 
-    # Act
-    ranked = orchestrator.run_triage_only(sample_artefact_set, use_fallback=True)
+    job = await orchestrator.execute_pipeline(
+        evidence_id=evidence.evidence_id,
+        case_id=sample_case_metadata.case_id,
+        user_id="user-1",
+        mode="triage-only",
+        use_fallback=True,
+    )
 
-    # Assert
-    assert len(ranked) == sample_artefact_set.total_count
-    assert all(item.suspicion_level is not None for item in ranked)
+    assert job.status is JobStatus.COMPLETED
+    context = orchestrator._job_contexts[job.job_id]  # noqa: SLF001
+    assert context.ranked_artefacts is not None
+    assert len(context.ranked_artefacts) == sample_artefact_set.total_count
 
 
-def test_pipeline_state_marks_evaluation_stage(
+@pytest.mark.asyncio
+async def test_pipeline_state_marks_evaluation_stage(
     tmp_path: Path,
     sample_case_metadata: CaseMetadata,
     sample_artefact_set: ArtefactSet,
     mock_audit_logger: MagicMock,
 ) -> None:
     """Verify full pipeline records all five stage results including evaluation."""
-    # Arrange
-    orchestrator, evidence_path = _pipeline(
+    orchestrator, evidence = _pipeline(
         tmp_path,
         sample_case_metadata,
         mock_audit_logger,
         sample_artefact_set,
     )
 
-    # Act
-    report = orchestrator.run_full_pipeline(
-        evidence_path,
-        sample_case_metadata,
+    job = await orchestrator.execute_pipeline(
+        evidence_id=evidence.evidence_id,
+        case_id=sample_case_metadata.case_id,
+        user_id="user-1",
+        mode="full",
         use_fallback=True,
     )
-    pipeline_id = next(
-        pid for pid, rid in orchestrator._pipeline_reports.items() if rid == report.report_id
-    )
-    state = orchestrator.get_pipeline_state(pipeline_id)
+    state = orchestrator.get_pipeline_state(job.job_id)
 
-    # Assert
     assert state is not None
     assert state.is_complete is True
     assert "evaluation" in state.stage_results

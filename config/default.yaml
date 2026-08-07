@@ -6,6 +6,7 @@ env: development
 # Evidence input locations and accepted forensic formats.
 evidence:
   evidence_dir: ./data/evidence
+  max_evidence_size_gb: 100.0
   supported_disk_formats:
     - ".dd"
     - ".raw"
@@ -32,6 +33,12 @@ ai_engine:
   max_tokens: 4096
   request_timeout_seconds: 120
   enable_fallback: true
+  context_window: 8192
+  max_retries: 3
+  retry_delay_seconds: 2.0
+  cache_responses: true
+  cache_ttl_seconds: 3600
+  max_input_artefacts: 500
 
 # Stage 4 dual-output reporting settings.
 reporting:
@@ -84,3 +91,15 @@ auth:
 api:
   cors_allow_origins:
     - "http://localhost:3000"
+
+# Five-stage forensic pipeline orchestration.
+pipeline:
+  max_concurrent_jobs: 1
+  stage_timeout_seconds: 600
+  parser_timeout_seconds: 300
+  max_artefacts_per_category: 10000
+  enable_artefact_correlation: true
+  enable_timeline_generation: true
+  enable_ioc_detection: true
+  volatility_plugins_timeout: 300
+  enable_memory_registry: true

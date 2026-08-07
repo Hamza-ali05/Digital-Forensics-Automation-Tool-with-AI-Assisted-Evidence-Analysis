@@ -1,25 +1,137 @@
-"""Windows Event Log (.evtx) parser using python-evtx.
+"""Windows Event Log (.evtx) parser using ``python-evtx``.
 
-Artefact ``raw_data`` schema for ``EVENT_LOG``:
-    event_id, timestamp, source, level, computer_name, message_text, channel
+Artefact ``raw_data`` schema for ``EVENT_LOG`` (contract)::
+
+    {
+        "event_id": int,
+        "timestamp": ISO-8601 str | null,
+        "channel": str | null,
+        "source": str | null,
+        "level": str | null,
+        "computer_name": str | null,
+        "message": str,              # truncated event XML / summary
+        "event_data": dict,          # name→value map from EventData
+        "is_security_relevant": bool,
+    }
+
+Known log locations are listed in ``EVTX_PATHS``. Security-relevant Event IDs
+are defined in ``SECURITY_EVENT_IDS``.
 """
 
 from __future__ import annotations
 
+import fnmatch
+import logging
+import re
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from dfat.core.enums import ArtefactCategory, EvidenceType
 from dfat.core.exceptions import DiskParsingError
-from dfat.core.models.artefact import Artefact, ArtefactSet
+from dfat.core.models.artefact import Artefact
 from dfat.core.models.evidence import EvidenceImage
-from dfat.forensic_engine.parsers import _tsk_utils
 from dfat.forensic_engine.parsers.base import BaseParser
+from dfat.forensic_engine.parsers.disk_access import DiskImageAccessor, FileEntry
+from dfat.forensic_engine.parsers.utils import (
+    convert_timestamp,
+    sanitise_path,
+    truncate_data,
+)
+from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
+from dfat.shared.constants import MAX_ARTEFACTS_PER_CATEGORY
+
+logger = logging.getLogger(__name__)
+
+EVTX_PATHS: list[str] = [
+    "Windows/System32/winevt/Logs/*.evtx",
+]
+
+SECURITY_EVENT_IDS: dict[int, str] = {
+    4624: "Logon",
+    4625: "Failed Logon",
+    4648: "Explicit Logon",
+    4672: "Special Privileges",
+    4688: "Process Created",
+    4689: "Process Exited",
+    4720: "User Created",
+    4722: "User Enabled",
+    4732: "Member Added to Group",
+    7045: "Service Installed",
+}
+
+_EVENT_ID_RE = re.compile(
+    r"<EventID(?:\s[^>]*)?>(\d+)</EventID>",
+    re.IGNORECASE,
+)
+_CHANNEL_RE = re.compile(
+    r"<Channel(?:\s[^>]*)?>([^<]*)</Channel>",
+    re.IGNORECASE,
+)
+_COMPUTER_RE = re.compile(
+    r"<Computer(?:\s[^>]*)?>([^<]*)</Computer>",
+    re.IGNORECASE,
+)
+_LEVEL_RE = re.compile(
+    r"<Level(?:\s[^>]*)?>([^<]*)</Level>",
+    re.IGNORECASE,
+)
+_PROVIDER_NAME_RE = re.compile(
+    r'<Provider[^>]*\bName="([^"]+)"',
+    re.IGNORECASE,
+)
+_PROVIDER_TEXT_RE = re.compile(
+    r"<Provider(?:\s[^>]*)?>([^<]*)</Provider>",
+    re.IGNORECASE,
+)
+_EVENT_DATA_BLOCK_RE = re.compile(
+    r"<EventData[^>]*>(.*?)</EventData>",
+    re.IGNORECASE | re.DOTALL,
+)
+_DATA_NAMED_RE = re.compile(
+    r'<Data\s+Name="([^"]+)"[^>]*>(.*?)</Data>',
+    re.IGNORECASE | re.DOTALL,
+)
+_DATA_PLAIN_RE = re.compile(
+    r"<Data(?:\s[^>]*)?>(.*?)</Data>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_LEVEL_NAMES = {
+    "0": "LogAlways",
+    "1": "Critical",
+    "2": "Error",
+    "3": "Warning",
+    "4": "Information",
+    "5": "Verbose",
+}
 
 
 class EventLogParser(BaseParser):
-    """Extract Windows event log artefacts from disk images."""
+    """Extract Windows Event Log artefacts from ``.evtx`` files in disk images.
+
+    Locates logs under ``EVTX_PATHS`` via ``DiskImageAccessor``, extracts each
+    file to a temporary path, parses with ``python-evtx``, and emits
+    ``EVENT_LOG`` artefacts. Corrupt logs are skipped after a warning.
+    """
+
+    _parse_error_class = DiskParsingError
+
+    def __init__(
+        self,
+        disk_accessor: DiskImageAccessor,
+        audit_logger: ForensicAuditLogger,
+        max_artefacts: int = MAX_ARTEFACTS_PER_CATEGORY,
+    ) -> None:
+        """Initialise the event log parser.
+
+        Args:
+            disk_accessor: Low-level pytsk3 disk image accessor.
+            audit_logger: ACPO-compliant forensic audit logger.
+            max_artefacts: Maximum artefacts retained for a single parse.
+        """
+        super().__init__(audit_logger=audit_logger, max_artefacts=max_artefacts)
+        self._disk_accessor = disk_accessor
 
     @property
     def parser_name(self) -> str:
@@ -34,135 +146,224 @@ class EventLogParser(BaseParser):
         """Return supported evidence types."""
         return [EvidenceType.DISK_IMAGE]
 
-    def parse(self, evidence: EvidenceImage) -> ArtefactSet:
-        """Locate and parse ``.evtx`` files from the disk image.
+    def _do_parse(self, evidence: EvidenceImage) -> list[Artefact]:
+        """Locate ``.evtx`` files, extract to temp, and parse event records."""
+        evtx_mod = self._safe_import(
+            "Evtx.Evtx",
+            "python-evtx is required for event log parsing. Install with: "
+            "pip install python-evtx",
+        )
+        evtx_cls = getattr(evtx_mod, "Evtx")
 
-        Args:
-            evidence: Disk image evidence metadata.
-
-        Returns:
-            Artefact set of event log entries.
-
-        Raises:
-            ImportError: If ``pytsk3`` or ``python-evtx`` is not installed.
-            DiskParsingError: If parsing fails fatally.
-        """
-        self._log_parse_start(evidence.evidence_id)
-        try:
-            from Evtx.Evtx import Evtx
-        except ImportError as exc:
-            raise ImportError(
-                "python-evtx is required for event log parsing. Install with: "
-                "pip install python-evtx"
-            ) from exc
-
-        _tsk_utils.require_pytsk3()
+        img_info = self._disk_accessor.open_image(Path(evidence.file_path))
         artefacts: list[Artefact] = []
+        temp_files: list[Path] = []
+        temp_dir = Path(tempfile.mkdtemp(prefix="dfat_evtx_"))
         try:
-            logs = _tsk_utils.find_files(
-                evidence.file_path,
-                predicate=lambda p: p.lower().endswith(".evtx"),
-                limit=20,
-            )
-            for log_path, content in logs:
-                if len(artefacts) >= self._max_artefacts:
+            fs_info = self._disk_accessor.get_filesystem(img_info)
+            for entry in self._locate_evtx_files(fs_info):
+                if not self._check_limit(len(artefacts)):
                     break
-                artefacts.extend(
-                    self._parse_evtx(
-                        content,
-                        log_path,
-                        evidence.evidence_id,
-                        Evtx,
-                        remaining=self._max_artefacts - len(artefacts),
-                    )
+                temp_path = self._disk_accessor.extract_file_to_temp(
+                    fs_info,
+                    entry.inode,
+                    temp_dir,
                 )
-        except ImportError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            self._log_parse_error(evidence.evidence_id, exc)
-            raise DiskParsingError(
-                f"EventLogParser failed for {evidence.file_path}",
-                context={"evidence_id": evidence.evidence_id, "error": str(exc)},
-            ) from exc
+                if temp_path is None:
+                    continue
+                temp_files.append(temp_path)
+                try:
+                    artefacts.extend(
+                        self._parse_evtx_file(
+                            temp_path,
+                            entry,
+                            evidence.evidence_id,
+                            evtx_cls,
+                            remaining=self._max_artefacts - len(artefacts),
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001 — corrupt EVTX
+                    logger.warning(
+                        "Skipping corrupt event log %s: %s",
+                        entry.path,
+                        exc,
+                    )
+                    continue
+        finally:
+            self._disk_accessor.close(img_info)
+            self._cleanup_temps(temp_files, temp_dir)
+        return artefacts
 
-        artefacts = self._truncate(artefacts)
-        result = self._to_artefact_set(evidence.evidence_id, artefacts)
-        self._log_parse_end(evidence.evidence_id, len(artefacts))
-        return result
+    def _locate_evtx_files(self, fs_info: Any) -> list[FileEntry]:
+        """Return filesystem entries matching ``EVTX_PATHS`` patterns."""
+        matches: list[FileEntry] = []
+        seen: set[int] = set()
+        for entry in self._disk_accessor.walk_filesystem(fs_info):
+            if entry.file_type in {"directory", "unknown"}:
+                continue
+            if entry.inode and entry.inode in seen:
+                continue
+            if not self._path_matches_evtx(entry.path):
+                continue
+            if entry.inode:
+                seen.add(entry.inode)
+            matches.append(entry)
+        return matches
 
-    def _parse_evtx(
+    @staticmethod
+    def _path_matches_evtx(path: str) -> bool:
+        """Return whether ``path`` matches a known EVTX location."""
+        normalised = sanitise_path(path).lstrip("/").lower()
+        for pattern in EVTX_PATHS:
+            candidate = pattern.replace("\\", "/").lower()
+            if fnmatch.fnmatch(normalised, candidate):
+                return True
+            if fnmatch.fnmatch("/" + normalised, "/" + candidate):
+                return True
+            if normalised.endswith(".evtx") and "winevt/logs" in normalised:
+                return True
+        return False
+
+    def _parse_evtx_file(
         self,
-        content: bytes,
-        source_path: str,
+        temp_path: Path,
+        entry: FileEntry,
         evidence_id: str,
         evtx_cls: Any,
         remaining: int,
     ) -> list[Artefact]:
-        """Parse an EVTX blob from temporary storage.
-
-        Args:
-            content: EVTX file bytes.
-            source_path: Path within the image.
-            evidence_id: Evidence identifier.
-            evtx_cls: ``Evtx`` class constructor.
-            remaining: Remaining artefact capacity.
-
-        Returns:
-            List of event log artefacts.
-        """
+        """Parse an extracted ``.evtx`` file into artefacts."""
         artefacts: list[Artefact] = []
-        with tempfile.NamedTemporaryFile(suffix=".evtx", delete=False) as handle:
-            handle.write(content)
-            temp_path = Path(handle.name)
         try:
             with evtx_cls(str(temp_path)) as log:
                 for record in log.records():
                     if len(artefacts) >= remaining:
                         break
                     try:
-                        xml = record.xml()
-                        artefacts.append(
-                            self._create_artefact(
-                                category=ArtefactCategory.EVENT_LOG,
-                                evidence_id=evidence_id,
-                                source_path=source_path,
-                                raw_data={
-                                    "event_id": self._extract_tag(xml, "EventID"),
-                                    "timestamp": str(record.timestamp()),
-                                    "source": self._extract_tag(xml, "Provider"),
-                                    "level": self._extract_tag(xml, "Level"),
-                                    "computer_name": self._extract_tag(
-                                        xml, "Computer"
-                                    ),
-                                    "message_text": xml[:2000],
-                                    "channel": self._extract_tag(xml, "Channel"),
-                                },
-                            )
+                        artefact = self._record_to_artefact(
+                            record,
+                            entry.path,
+                            evidence_id,
                         )
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # noqa: BLE001 — skip bad records
                         continue
-        except Exception:  # noqa: BLE001 - skip corrupt logs
+                    if artefact is not None:
+                        artefacts.append(artefact)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to parse event log %s: %s",
+                entry.path,
+                exc,
+            )
             return []
-        finally:
-            temp_path.unlink(missing_ok=True)
         return artefacts
 
+    def _record_to_artefact(
+        self,
+        record: Any,
+        source_path: str,
+        evidence_id: str,
+    ) -> Optional[Artefact]:
+        """Convert a single EVTX record into an ``EVENT_LOG`` artefact."""
+        xml = record.xml()
+        event_id = self._parse_event_id(xml)
+        if event_id is None:
+            return None
+
+        ts = convert_timestamp(record.timestamp())
+        level_raw = self._match_group(_LEVEL_RE, xml)
+        source = self._extract_provider(xml)
+        channel = self._match_group(_CHANNEL_RE, xml)
+        computer = self._match_group(_COMPUTER_RE, xml)
+        event_data = self._parse_event_data(xml)
+        if event_id in SECURITY_EVENT_IDS:
+            event_data.setdefault(
+                "security_event_label",
+                SECURITY_EVENT_IDS[event_id],
+            )
+
+        return self._create_artefact(
+            category=ArtefactCategory.EVENT_LOG,
+            evidence_id=evidence_id,
+            source_path=source_path,
+            raw_data={
+                "event_id": event_id,
+                "timestamp": ts.isoformat() if ts is not None else None,
+                "channel": channel,
+                "source": source,
+                "level": _LEVEL_NAMES.get(level_raw or "", level_raw),
+                "computer_name": computer,
+                "message": truncate_data(xml, 2000),
+                "event_data": event_data,
+                "is_security_relevant": event_id in SECURITY_EVENT_IDS,
+            },
+        )
+
     @staticmethod
-    def _extract_tag(xml: str, tag: str) -> str | None:
-        """Best-effort extraction of a simple XML tag value.
-
-        Args:
-            xml: Event XML string.
-            tag: Tag name to locate.
-
-        Returns:
-            Tag text if found; otherwise None.
-        """
-        start = xml.find(f"<{tag}")
-        if start < 0:
+    def _parse_event_id(xml: str) -> Optional[int]:
+        """Extract integer Event ID from record XML."""
+        match = _EVENT_ID_RE.search(xml)
+        if match is None:
             return None
-        start = xml.find(">", start)
-        end = xml.find(f"</{tag}>", start)
-        if start < 0 or end < 0:
+        try:
+            return int(match.group(1))
+        except ValueError:
             return None
-        return xml[start + 1 : end].strip() or None
+
+    @staticmethod
+    def _extract_provider(xml: str) -> Optional[str]:
+        """Extract provider/source name from record XML."""
+        match = _PROVIDER_NAME_RE.search(xml)
+        if match is not None:
+            return match.group(1).strip() or None
+        match = _PROVIDER_TEXT_RE.search(xml)
+        if match is not None:
+            return match.group(1).strip() or None
+        return None
+
+    @staticmethod
+    def _parse_event_data(xml: str) -> dict[str, str]:
+        """Parse ``EventData`` name/value pairs from record XML."""
+        block = _EVENT_DATA_BLOCK_RE.search(xml)
+        if block is None:
+            return {}
+        body = block.group(1)
+        named = _DATA_NAMED_RE.findall(body)
+        if named:
+            return {
+                name: truncate_data(value.strip(), 1000)
+                for name, value in named
+            }
+        plain = _DATA_PLAIN_RE.findall(body)
+        return {
+            f"data_{index}": truncate_data(value.strip(), 1000)
+            for index, value in enumerate(plain)
+            if value.strip()
+        }
+
+    @staticmethod
+    def _match_group(pattern: re.Pattern[str], xml: str) -> Optional[str]:
+        """Return the first regex capture group, or ``None``."""
+        match = pattern.search(xml)
+        if match is None:
+            return None
+        text = match.group(1).strip()
+        return text or None
+
+    @staticmethod
+    def _cleanup_temps(temp_files: list[Path], temp_dir: Path) -> None:
+        """Remove extracted EVTX files and the temporary directory."""
+        for path in temp_files:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                continue
+        try:
+            temp_dir.rmdir()
+        except OSError:
+            try:
+                for child in temp_dir.iterdir():
+                    child.unlink(missing_ok=True)
+                temp_dir.rmdir()
+            except OSError:
+                pass

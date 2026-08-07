@@ -15,16 +15,41 @@ from dfat.api.middleware.rate_limiter import RateLimiterMiddleware
 from dfat.api.middleware.request_id import RequestIDMiddleware
 from dfat.api.middleware.security_headers import SecurityHeadersMiddleware
 from dfat.api.middleware.validation import RequestValidationMiddleware
-from dfat.api.routes import analysis, auth, evaluation, evidence, health, reports, users
+from dfat.api.routes import (
+    ai,
+    analysis,
+    auth,
+    cases,
+    evaluation,
+    evidence,
+    evidence_management,
+    health,
+    pipeline,
+    reports,
+    users,
+)
 from dfat.api.versioning import API_V1_PREFIX
-from dfat.container import ApplicationContainer
+from dfat.container import ApplicationContainer, build_application_container
 
 _OPENAPI_TAGS = [
     {"name": "Auth", "description": "Registration, login, and token lifecycle"},
     {"name": "Users", "description": "User profile and administration"},
     {"name": "Health", "description": "Liveness, readiness, and system diagnostics"},
+    {"name": "Cases", "description": "Investigation case lifecycle management"},
     {"name": "Evidence", "description": "Forensic evidence registration and metadata"},
+    {
+        "name": "Evidence Management",
+        "description": "Validation, custody, inventory, and integrity workflows",
+    },
     {"name": "Analysis", "description": "Automated analysis pipeline control"},
+    {
+        "name": "AI Analysis",
+        "description": "Local LLaMA-3 classification, summarisation, explanation, and Q&A",
+    },
+    {
+        "name": "Pipeline",
+        "description": "Job submission, progress monitoring, and parser inventory",
+    },
     {"name": "Reports", "description": "Dual-output forensic report retrieval"},
     {
         "name": "Evaluation",
@@ -70,7 +95,7 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application with DI container attached.
     """
-    container = ApplicationContainer()
+    container = build_application_container()
     settings = container.settings()
 
     app = FastAPI(
@@ -110,8 +135,14 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=api_prefix)
     app.include_router(auth.router, prefix=api_prefix)
     app.include_router(users.router, prefix=api_prefix)
+    app.include_router(cases.router, prefix=api_prefix)
+    # Evidence Management routes before legacy Evidence so static paths
+    # (/register, /inventory, /statistics) are not captured by /{evidence_id}.
+    app.include_router(evidence_management.router, prefix=api_prefix)
     app.include_router(evidence.router, prefix=api_prefix)
     app.include_router(analysis.router, prefix=api_prefix)
+    app.include_router(ai.router, prefix=api_prefix)
+    app.include_router(pipeline.router, prefix=api_prefix)
     app.include_router(reports.router, prefix=api_prefix)
     app.include_router(evaluation.router, prefix=api_prefix)
 

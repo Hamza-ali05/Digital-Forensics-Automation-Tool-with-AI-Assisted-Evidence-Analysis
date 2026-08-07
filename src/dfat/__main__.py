@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
 from dfat import __version__
-from dfat.container import ApplicationContainer
+from dfat.container import build_application_container
 from dfat.core.enums import EvidenceType
 from dfat.core.exceptions import DFATError
-from dfat.core.models.evidence import CaseMetadata
-from dfat.core.validators import validate_file_extension, SUPPORTED_DISK_EXTENSIONS
+from dfat.core.validators import SUPPORTED_DISK_EXTENSIONS, validate_file_extension
+from dfat.pipeline.enums import JobStatus
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -95,19 +96,9 @@ def _print_banner(mode: str, verbose: bool) -> None:
     print("=" * 64)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point.
-
-    Args:
-        argv: Optional argument list override for testing.
-
-    Returns:
-        Process exit code.
-    """
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    container = ApplicationContainer()
+async def _run_pipeline(args: argparse.Namespace) -> int:
+    """Register evidence and execute the job-based pipeline."""
+    container = build_application_container()
     if args.config is not None:
         container.config.from_dict({"config_path": str(args.config)})
     container.logging.setup_app_logging()
@@ -127,48 +118,106 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Evidence path not found: {evidence_path}", file=sys.stderr)
         return 1
 
-    case = CaseMetadata(
+    if args.mode == "evaluate":
+        print("Evaluate mode requires a prior parse and ground-truth path via API.")
+        return 1
+
+    engine = container.database.database_engine()
+    await engine.create_tables()
+
+    if validate_file_extension(evidence_path, SUPPORTED_DISK_EXTENSIONS):
+        evidence_type = EvidenceType.DISK_IMAGE
+    else:
+        evidence_type = EvidenceType.MEMORY_DUMP
+
+    use_fallback = bool(args.use_fallback) or True
+    if args.verbose:
+        print(f"Evidence type hint: {evidence_type.value}")
+        print(f"Using fallback triage: {use_fallback}")
+
+    evidence_service = container.services.evidence_service()
+    evidence = await evidence_service.register_evidence(
+        file_path=evidence_path,
         case_name=args.case_name,
         investigator=args.investigator,
+        evidence_type=evidence_type,
         description="Created via DFAT CLI",
+        user_id="cli",
     )
+
     orchestrator = container.pipeline.pipeline_orchestrator()
-
-    try:
-        if args.mode == "parse-only":
-            artefact_set = orchestrator.run_parse_only(evidence_path, case)
-            print(f"Parse complete: {artefact_set.total_count} artefacts")
-            return 0
-        if args.mode == "triage-only":
-            artefact_set = orchestrator.run_parse_only(evidence_path, case)
-            ranked = orchestrator.run_triage_only(
-                artefact_set,
-                use_fallback=args.use_fallback or True,
-            )
-            print(f"Triage complete: {len(ranked)} ranked artefacts")
-            return 0
-        if args.mode == "evaluate":
-            print("Evaluate mode requires a prior parse and ground-truth path via API.")
-            return 1
-
-        # Default: full pipeline with forced fallback for offline CLI friendliness.
-        use_fallback = args.use_fallback or True
-        if validate_file_extension(evidence_path, SUPPORTED_DISK_EXTENSIONS):
-            evidence_hint = EvidenceType.DISK_IMAGE
-        else:
-            evidence_hint = EvidenceType.MEMORY_DUMP
-        if args.verbose:
-            print(f"Evidence type hint: {evidence_hint.value}")
-            print(f"Using fallback triage: {use_fallback}")
-
-        report = orchestrator.run_full_pipeline(
-            evidence_path,
-            case,
+    mode = args.mode
+    if mode == "triage-only":
+        # Ensure artefacts exist before triage-only stage.
+        parse_job = await orchestrator.execute_pipeline(
+            evidence_id=evidence.evidence_id,
+            case_id=evidence.case.case_id,
+            user_id="cli",
+            mode="parse-only",
             use_fallback=use_fallback,
         )
-        print(f"Pipeline complete. Report ID: {report.report_id}")
-        print(f"Duration: {report.pipeline_duration_seconds:.2f}s")
+        if parse_job.status is not JobStatus.COMPLETED:
+            print(
+                f"Parse failed before triage: {parse_job.error_message}",
+                file=sys.stderr,
+            )
+            return 1
+
+    job = await orchestrator.execute_pipeline(
+        evidence_id=evidence.evidence_id,
+        case_id=evidence.case.case_id,
+        user_id="cli",
+        mode=mode,
+        use_fallback=use_fallback,
+    )
+
+    if job.status is not JobStatus.COMPLETED:
+        print(
+            f"Pipeline failed: {job.error_message or job.status.value}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if mode == "parse-only":
+        artefact_set = orchestrator.get_job_artefact_set(job.job_id)
+        count = artefact_set.total_count if artefact_set is not None else 0
+        print(f"Parse complete: {count} artefacts")
         return 0
+
+    if mode == "triage-only":
+        artefact_set = orchestrator.get_job_artefact_set(job.job_id)
+        ranked = orchestrator._job_contexts.get(job.job_id)  # noqa: SLF001
+        ranked_count = (
+            len(ranked.ranked_artefacts)
+            if ranked is not None and ranked.ranked_artefacts is not None
+            else (artefact_set.total_count if artefact_set else 0)
+        )
+        print(f"Triage complete: {ranked_count} ranked artefacts")
+        return 0
+
+    report = orchestrator.get_job_report(job.job_id)
+    if report is None:
+        print(f"Pipeline complete (job {job.job_id}) but no report was produced.")
+        return 0
+    print(f"Pipeline complete. Report ID: {report.report_id}")
+    print(f"Duration: {report.pipeline_duration_seconds:.2f}s")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point.
+
+    Args:
+        argv: Optional argument list override for testing.
+
+    Returns:
+        Process exit code.
+    """
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        return asyncio.run(_run_pipeline(args))
     except DFATError as exc:
         print(f"DFAT error: {exc.message}", file=sys.stderr)
         if args.verbose and exc.context:

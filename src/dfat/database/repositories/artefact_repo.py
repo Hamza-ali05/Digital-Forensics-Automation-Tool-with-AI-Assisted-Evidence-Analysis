@@ -132,6 +132,27 @@ class SQLAlchemyArtefactRepository(IArtefactRepository):
                     context={"evidence_id": entity_id, "error": str(exc)},
                 ) from exc
 
+    async def get_by_artefact_id(self, artefact_id: str) -> Optional[Artefact]:
+        """Load a single artefact by its primary key.
+
+        Args:
+            artefact_id: Artefact record identifier.
+
+        Returns:
+            Domain artefact when found; otherwise ``None``.
+        """
+        async with self._session_factory() as session:
+            try:
+                row = await session.get(ArtefactRecordORM, artefact_id)
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to load artefact by id",
+                    context={"artefact_id": artefact_id, "error": str(exc)},
+                ) from exc
+            if row is None:
+                return None
+            return artefact_orm_to_domain(row)
+
     async def get_by_category(
         self,
         evidence_id: str,

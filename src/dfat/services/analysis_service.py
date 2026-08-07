@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from dfat.core.enums import PipelineStage
-from dfat.core.exceptions import EvidenceNotFoundError
+from dfat.core.exceptions import EvidenceNotFoundError, ParsingError
 from dfat.core.models.artefact import ArtefactSet
 from dfat.core.models.pipeline import AuditEntry, PipelineState
 from dfat.core.models.report import ForensicReport
@@ -14,7 +12,8 @@ from dfat.database.repositories.audit_repo import SQLAlchemyAuditRepository
 from dfat.database.repositories.evidence_repo import SQLAlchemyEvidenceRepository
 from dfat.database.repositories.report_repo import SQLAlchemyReportRepository
 from dfat.forensic_engine.acquisition.integrity import IntegrityChecker
-from dfat.pipeline import PipelineOrchestrator
+from dfat.pipeline.enums import JobStatus
+from dfat.pipeline.orchestrator import PipelineOrchestrator
 
 
 class AnalysisService:
@@ -62,30 +61,34 @@ class AnalysisService:
         Returns:
             Persisted forensic report.
         """
-        evidence = await self._evidence_repo.get(evidence_id)
-        if evidence is None:
-            raise EvidenceNotFoundError(
-                f"Evidence not found: {evidence_id}",
-                context={"evidence_id": evidence_id},
-            )
-        await asyncio.to_thread(
-            self._integrity_checker.verify_integrity,
+        evidence = await self._require_evidence(evidence_id)
+        self._integrity_checker.verify_integrity(
             evidence.file_path,
             evidence.original_hash,
             evidence.evidence_id,
         )
-        report = await asyncio.to_thread(
-            self._pipeline.run_full_pipeline,
-            evidence.file_path,
-            evidence.case,
+        job = await self._pipeline.execute_pipeline(
+            evidence_id=evidence_id,
+            case_id=evidence.case.case_id,
+            user_id=user_id,
+            mode="full",
             use_fallback=use_fallback,
         )
-        # Pipeline caches artefacts under the acquisition evidence ID.
-        pipeline_evidence_id = report.json_report.evidence_id
-        artefact_set = self._pipeline._artefact_cache.get(pipeline_evidence_id)  # noqa: SLF001
+        if job.status is not JobStatus.COMPLETED:
+            raise ParsingError(
+                f"Pipeline job failed: {job.error_message or job.status.value}",
+                context={"job_id": job.job_id, "status": job.status.value},
+            )
+        report = self._pipeline.get_job_report(job.job_id)
+        if report is None:
+            raise ParsingError(
+                f"Pipeline completed without a report: {job.job_id}",
+                context={"job_id": job.job_id},
+            )
+        artefact_set = self._pipeline.get_job_artefact_set(job.job_id)
         if artefact_set is None:
             artefact_set = ArtefactSet(
-                evidence_id=pipeline_evidence_id,
+                evidence_id=evidence_id,
                 artefacts=[],
                 categories_present=[],
             )
@@ -97,7 +100,7 @@ class AnalysisService:
             user_id=user_id,
             details={
                 "report_id": report.report_id,
-                "pipeline_evidence_id": pipeline_evidence_id,
+                "job_id": job.job_id,
                 "use_fallback": use_fallback,
                 "duration_seconds": report.pipeline_duration_seconds,
             },
@@ -114,23 +117,29 @@ class AnalysisService:
         Returns:
             Parsed artefact set.
         """
-        evidence = await self._evidence_repo.get(evidence_id)
-        if evidence is None:
-            raise EvidenceNotFoundError(
-                f"Evidence not found: {evidence_id}",
-                context={"evidence_id": evidence_id},
-            )
-        await asyncio.to_thread(
-            self._integrity_checker.verify_integrity,
+        evidence = await self._require_evidence(evidence_id)
+        self._integrity_checker.verify_integrity(
             evidence.file_path,
             evidence.original_hash,
             evidence.evidence_id,
         )
-        artefact_set = await asyncio.to_thread(
-            self._pipeline.run_parse_only,
-            evidence.file_path,
-            evidence.case,
+        job = await self._pipeline.execute_pipeline(
+            evidence_id=evidence_id,
+            case_id=evidence.case.case_id,
+            user_id=user_id,
+            mode="parse-only",
         )
+        if job.status is not JobStatus.COMPLETED:
+            raise ParsingError(
+                f"Parse-only job failed: {job.error_message or job.status.value}",
+                context={"job_id": job.job_id, "status": job.status.value},
+            )
+        artefact_set = self._pipeline.get_job_artefact_set(job.job_id)
+        if artefact_set is None:
+            raise ParsingError(
+                f"Parse-only completed without artefacts: {job.job_id}",
+                context={"job_id": job.job_id},
+            )
         await self._artefact_repo.save(artefact_set)
         await self._audit(
             action="PARSE_ONLY_COMPLETED",
@@ -138,10 +147,36 @@ class AnalysisService:
             user_id=user_id,
             details={
                 "artefact_count": artefact_set.total_count,
-                "pipeline_evidence_id": artefact_set.evidence_id,
+                "job_id": job.job_id,
             },
         )
         return artefact_set
+
+    async def run_triage_only(
+        self,
+        evidence_id: str,
+        user_id: str,
+        use_fallback: bool = False,
+    ) -> PipelineState:
+        """Parse (if needed) then run triage-only; return pipeline state."""
+        evidence = await self._require_evidence(evidence_id)
+        if self._pipeline._artefact_cache.get(evidence_id) is None:  # noqa: SLF001
+            await self.run_parse_only(evidence_id, user_id)
+
+        job = await self._pipeline.execute_pipeline(
+            evidence_id=evidence_id,
+            case_id=evidence.case.case_id,
+            user_id=user_id,
+            mode="triage-only",
+            use_fallback=use_fallback,
+        )
+        state = self._pipeline.get_pipeline_state(job.job_id)
+        if state is None:
+            raise EvidenceNotFoundError(
+                f"Pipeline state missing for job: {job.job_id}",
+                context={"job_id": job.job_id},
+            )
+        return state
 
     async def get_analysis_status(self, pipeline_id: str) -> PipelineState:
         """Return pipeline state for a run ID."""
@@ -152,6 +187,16 @@ class AnalysisService:
                 context={"pipeline_id": pipeline_id},
             )
         return state
+
+    async def _require_evidence(self, evidence_id: str):
+        """Load evidence or raise ``EvidenceNotFoundError``."""
+        evidence = await self._evidence_repo.get(evidence_id)
+        if evidence is None:
+            raise EvidenceNotFoundError(
+                f"Evidence not found: {evidence_id}",
+                context={"evidence_id": evidence_id},
+            )
+        return evidence
 
     async def _audit(
         self,

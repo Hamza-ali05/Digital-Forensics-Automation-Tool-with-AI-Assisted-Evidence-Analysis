@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from dfat.ai_engine.analyzer import LocalLLMClient
+from dfat.ai_engine.assistance.investigator_qa import InvestigatorQAAssistant
+from dfat.ai_engine.caching.response_cache import AIResponseCache
+from dfat.ai_engine.fallback.rule_based import RuleBasedAnalyzer
+from dfat.ai_engine.llm.connection import LLMConnectionManager
+from dfat.ai_engine.monitoring.ai_monitor import AIMonitor
 from dfat.auth.dependencies import (
     get_current_active_user,
     get_current_user,
@@ -14,7 +20,10 @@ from dfat.auth.dependencies import (
     oauth2_scheme,
 )
 from dfat.auth.rbac import PermissionChecker, require_permission, require_role
+from dfat.database.repositories.ai_analysis_repo import SQLAlchemyAIAnalysisRepository
+from dfat.database.repositories.artefact_repo import SQLAlchemyArtefactRepository
 from dfat.evaluation.benchmark.comparator import BenchmarkComparator
+from dfat.evidence_management.custody_service import ChainOfCustodyService
 from dfat.forensic_engine.acquisition.image_handler import DiskImageHandler
 from dfat.forensic_engine.acquisition.memory_handler import MemoryDumpHandler
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
@@ -24,7 +33,9 @@ from dfat.pipeline import PipelineOrchestrator
 from dfat.reporting.report_builder import DualOutputReportBuilder
 from dfat.services.analysis_service import AnalysisService
 from dfat.services.audit_service import AuditService
+from dfat.services.case_service import CaseService
 from dfat.services.evaluation_service import EvaluationService
+from dfat.services.evidence_management_service import EvidenceManagementService
 from dfat.services.evidence_service import EvidenceService
 from dfat.services.report_service import ReportService
 from dfat.services.user_service import UserService
@@ -105,22 +116,88 @@ def get_evaluation_service(request: Request) -> EvaluationService:
     return _container(request).services.evaluation_service()
 
 
+def get_case_service(request: Request) -> CaseService:
+    """Resolve the case lifecycle management service."""
+    return _container(request).services.case_service()
+
+
+def get_evidence_management_service(request: Request) -> EvidenceManagementService:
+    """Resolve the enhanced evidence management service."""
+    return _container(request).services.evidence_management_service()
+
+
+def get_custody_service(request: Request) -> ChainOfCustodyService:
+    """Resolve the chain-of-custody service."""
+    return _container(request).services.chain_of_custody_service()
+
+
+def get_llm_client(request: Request) -> LocalLLMClient:
+    """Provide the assembled local LLaMA-3 analyser client."""
+    return _container(request).ai_engine.llm_client()
+
+
+def get_qa_assistant(request: Request) -> InvestigatorQAAssistant:
+    """Provide the investigator Q&A assistant (via the LLM client)."""
+    return get_llm_client(request).get_qa_assistant()
+
+
+def get_fallback_analyzer(request: Request) -> RuleBasedAnalyzer:
+    """Provide the rule-based AI fallback analyser."""
+    return _container(request).ai_engine.fallback()
+
+
+def get_llm_connection_manager(request: Request) -> LLMConnectionManager:
+    """Provide the Ollama connection/health manager."""
+    return _container(request).ai_engine.connection_manager()
+
+
+def get_ai_monitor(request: Request) -> AIMonitor:
+    """Provide the AI usage monitor."""
+    return _container(request).ai_engine.ai_monitor()
+
+
+def get_ai_response_cache(request: Request) -> AIResponseCache:
+    """Provide the AI response cache."""
+    return _container(request).ai_engine.ai_response_cache()
+
+
+def get_artefact_repository(request: Request) -> SQLAlchemyArtefactRepository:
+    """Provide the SQLAlchemy artefact repository."""
+    return _container(request).repositories.artefact_repo()
+
+
+def get_ai_analysis_repo(request: Request) -> SQLAlchemyAIAnalysisRepository:
+    """Provide the AI analysis record repository."""
+    return _container(request).repositories.ai_analysis_repo()
+
+
 __all__ = [
     "PermissionChecker",
+    "get_ai_analysis_repo",
+    "get_ai_monitor",
+    "get_ai_response_cache",
     "get_analysis_service",
+    "get_artefact_repository",
     "get_audit_logger",
     "get_audit_service",
     "get_benchmark_comparator",
+    "get_case_service",
     "get_current_active_user",
     "get_current_user",
+    "get_custody_service",
     "get_disk_image_handler",
     "get_evaluation_service",
+    "get_evidence_management_service",
     "get_evidence_repository",
     "get_evidence_service",
+    "get_fallback_analyzer",
     "get_forensic_orchestrator",
     "get_jwt_handler",
+    "get_llm_client",
+    "get_llm_connection_manager",
     "get_memory_dump_handler",
     "get_optional_user",
+    "get_qa_assistant",
     "get_report_builder",
     "get_report_repository",
     "get_report_service",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from dfat.ai_engine.llm.client import LocalLLMClient
+from dfat.ai_engine.analyzer import LocalLLMClient
 from dfat.core.enums import SuspicionLevel
 from dfat.core.models.artefact import Artefact, ArtefactSet, RankedArtefact
 

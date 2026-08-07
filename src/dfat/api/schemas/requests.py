@@ -27,6 +27,15 @@ class AnalysisRunRequest(BaseModel):
     use_fallback: bool = False
 
 
+class PipelineRunRequest(BaseModel):
+    """Request body for submitting a pipeline job."""
+
+    evidence_id: str
+    case_id: str
+    mode: str = Field(default="full", pattern="^(full|parse-only|triage-only)$")
+    use_fallback: bool = False
+
+
 class BenchmarkRunRequest(BaseModel):
     """Request body for running a benchmark evaluation."""
 

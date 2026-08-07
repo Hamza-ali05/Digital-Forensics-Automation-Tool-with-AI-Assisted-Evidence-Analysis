@@ -1,42 +1,49 @@
-"""Rule-based AI triage fallback (no LLM dependency)."""
+"""Rule-based AI triage fallback (no LLM dependency).
+
+Uses the Prompt 4 ``RuleBasedTriageEngine`` for deterministic ranking when
+the local LLM is unavailable.
+"""
 
 from __future__ import annotations
 
-import ipaddress
-from typing import Any
+import logging
+from typing import Optional
 
-from dfat.core.enums import ArtefactCategory, SuspicionLevel
 from dfat.core.interfaces.analyzer import IArtefactAnalyzer
-from dfat.core.models.artefact import Artefact, ArtefactSet, RankedArtefact
+from dfat.core.models.artefact import ArtefactSet, RankedArtefact
+from dfat.forensic_engine.processing.ioc_detector import IOCMatch
+from dfat.forensic_engine.processing.relationship_mapper import RelationshipMap
+from dfat.forensic_engine.processing.timeline import Timeline
+from dfat.forensic_engine.triage.aggregator import TriageAggregator
+from dfat.forensic_engine.triage.rule_engine import RuleBasedTriageEngine
+from dfat.forensic_engine.triage.scoring import ScoringEngine
+from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
 
-_SUSPICIOUS_PROCESS_NAMES = frozenset(
-    {
-        "mimikatz.exe",
-        "powershell.exe",
-        "pwsh.exe",
-        "cmd.exe",
-        "wscript.exe",
-        "cscript.exe",
-        "mshta.exe",
-        "rundll32.exe",
-        "regsvr32.exe",
-        "procdump.exe",
-        "nc.exe",
-        "ncat.exe",
-    }
-)
-
-_SCORE_BY_LEVEL: dict[SuspicionLevel, float] = {
-    SuspicionLevel.CRITICAL: 1.0,
-    SuspicionLevel.HIGH: 0.8,
-    SuspicionLevel.MEDIUM: 0.5,
-    SuspicionLevel.LOW: 0.25,
-    SuspicionLevel.INFORMATIONAL: 0.05,
-}
+logger = logging.getLogger(__name__)
 
 
 class RuleBasedAnalyzer(IArtefactAnalyzer):
-    """Keyword/heuristic triage used when the local LLM is unavailable."""
+    """Deterministic fallback analyzer. No LLM dependency.
+
+    Uses the rule-based triage engine from Prompt 4.
+    """
+
+    def __init__(
+        self,
+        rule_engine: Optional[RuleBasedTriageEngine] = None,
+        triage_aggregator: Optional[TriageAggregator] = None,
+        audit_logger: Optional[ForensicAuditLogger] = None,
+    ) -> None:
+        """Initialise the rule-based fallback analyser.
+
+        Args:
+            rule_engine: Prompt 4 triage engine (default constructed if omitted).
+            triage_aggregator: Aggregator for template summaries.
+            audit_logger: Optional forensic audit logger.
+        """
+        self._rule_engine = rule_engine or RuleBasedTriageEngine(ScoringEngine())
+        self._aggregator = triage_aggregator or TriageAggregator()
+        self._audit_logger = audit_logger
 
     @property
     def analyzer_name(self) -> str:
@@ -48,104 +55,40 @@ class RuleBasedAnalyzer(IArtefactAnalyzer):
         return True
 
     def analyze(self, artefact_set: ArtefactSet) -> list[RankedArtefact]:
-        """Classify artefacts using deterministic heuristic rules.
+        """Rank artefacts via ``RuleBasedTriageEngine.evaluate``.
 
-        Args:
-            artefact_set: Parsed artefacts pending triage.
-
-        Returns:
-            Ranked artefacts ordered by suspicion then score.
+        Uses empty IOC matches and an empty relationship map when artefact
+        processing has not populated them yet.
         """
-        ranked = [self._classify_one(artefact) for artefact in artefact_set.artefacts]
-        ranked.sort(
-            key=lambda item: (
-                -_SCORE_BY_LEVEL.get(item.suspicion_level, 0.0),
-                -item.relevance_score,
-            )
+        ioc_matches: list[IOCMatch] = []
+        relationship_map = RelationshipMap()
+        ranked = self._rule_engine.evaluate(
+            artefact_set,
+            ioc_matches,
+            relationship_map,
         )
         return ranked
 
     def summarize(self, ranked_artefacts: list[RankedArtefact]) -> str:
-        """Generate a template-based summary without LLM dependency.
-
-        Args:
-            ranked_artefacts: Triaged artefacts.
-
-        Returns:
-            Human-readable template summary.
-        """
-        categories = {item.category for item in ranked_artefacts}
-        critical_count = sum(
-            1
-            for item in ranked_artefacts
-            if item.suspicion_level is SuspicionLevel.CRITICAL
+        """Generate a deterministic template summary from triage aggregation."""
+        summary = self._aggregator.aggregate(
+            ranked_artefacts,
+            Timeline(),
+            [],
         )
-        high_count = sum(
-            1 for item in ranked_artefacts if item.suspicion_level is SuspicionLevel.HIGH
+        findings = "\n".join(f"- {item}" for item in summary.key_findings) or (
+            "- No key findings"
+        )
+        by_level = ", ".join(
+            f"{level}={count}" for level, count in sorted(summary.by_suspicion.items())
         )
         return (
-            f"Analysis identified {len(ranked_artefacts)} artefacts across "
-            f"{len(categories)} categories. {critical_count} items flagged as "
-            f"critical and {high_count} as high. "
+            f"Rule-based triage summary ({self.analyzer_name})\n"
+            f"Total artefacts: {summary.total_artefacts}\n"
+            f"Suspicion distribution: {by_level}\n"
+            f"IOC matches considered: {summary.ioc_count}\n"
+            f"Timeline range: {summary.timeline_range or 'n/a'}\n"
+            f"Key findings:\n{findings}\n"
             "This summary was produced by the rule-based fallback analyser "
             "(no LLM). Structured JSON remains the authoritative record."
-        )
-
-    def _classify_one(self, artefact: Artefact) -> RankedArtefact:
-        """Apply heuristic rules to a single artefact."""
-        level, reason = self._rule_level(artefact)
-        return RankedArtefact(
-            **artefact.model_dump(),
-            suspicion_level=level,
-            relevance_score=_SCORE_BY_LEVEL[level],
-            classification_reasoning=reason,
-        )
-
-    def _rule_level(self, artefact: Artefact) -> tuple[SuspicionLevel, str]:
-        """Return suspicion level and reason for an artefact."""
-        raw = artefact.raw_data
-        if artefact.category is ArtefactCategory.INJECTED_CODE:
-            return SuspicionLevel.CRITICAL, "Injected code finding (malfind)"
-
-        if artefact.category is ArtefactCategory.REGISTRY_KEY:
-            key_path = str(raw.get("key_path", "")).lower()
-            value_name = str(raw.get("value_name", "")).lower()
-            joined = f"{key_path} {value_name}"
-            if "runonce" in joined or "\\run" in joined or joined.endswith("run"):
-                return SuspicionLevel.HIGH, "Autorun registry key (Run/RunOnce)"
-
-        if artefact.category is ArtefactCategory.FILESYSTEM_METADATA:
-            if bool(raw.get("is_deleted")):
-                return SuspicionLevel.MEDIUM, "Deleted filesystem entry"
-
-        if artefact.category is ArtefactCategory.RUNNING_PROCESS:
-            name = str(raw.get("name", "")).lower()
-            if name in _SUSPICIOUS_PROCESS_NAMES:
-                return SuspicionLevel.HIGH, f"Suspicious process name: {name}"
-
-        if artefact.category is ArtefactCategory.NETWORK_CONNECTION:
-            if self._is_external_remote(raw):
-                return SuspicionLevel.MEDIUM, "Network connection to external IP"
-
-        return SuspicionLevel.INFORMATIONAL, "No elevated heuristic matched"
-
-    @staticmethod
-    def _is_external_remote(raw: dict[str, Any]) -> bool:
-        """Return True if remote_address looks like a public IP."""
-        remote = str(raw.get("remote_address", "")).split("%")[0].strip()
-        if not remote or remote in {"0.0.0.0", "*", "::", "::0"}:
-            return False
-        # Strip port if present in combined fields.
-        if remote.count(":") == 1 and remote.replace(".", "").replace(":", "").isdigit():
-            remote = remote.split(":")[0]
-        try:
-            address = ipaddress.ip_address(remote)
-        except ValueError:
-            return False
-        return not (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_multicast
-            or address.is_unspecified
         )

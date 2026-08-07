@@ -1,22 +1,63 @@
-"""Filesystem metadata parser using pytsk3.
+"""Filesystem metadata parser using ``DiskImageAccessor``.
 
-Artefact ``raw_data`` schema for ``FILESYSTEM_METADATA``:
-    filename, path, size, created_time, modified_time, accessed_time,
-    is_deleted, file_type, inode_number
+Artefact ``raw_data`` schema for ``FILESYSTEM_METADATA`` (contract)::
+
+    {
+        "filename": str,
+        "path": str,
+        "size": int,
+        "created_time": ISO-8601 str | null,
+        "modified_time": ISO-8601 str | null,
+        "accessed_time": ISO-8601 str | null,
+        "changed_time": ISO-8601 str | null,
+        "is_deleted": bool,
+        "is_allocated": bool,
+        "file_type": str,   # "file" | "directory" | "deleted" | "unknown"
+        "inode": int,
+    }
 """
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
 from dfat.core.enums import ArtefactCategory, EvidenceType
 from dfat.core.exceptions import DiskParsingError
-from dfat.core.models.artefact import Artefact, ArtefactSet
+from dfat.core.models.artefact import Artefact
 from dfat.core.models.evidence import EvidenceImage
-from dfat.forensic_engine.parsers import _tsk_utils
 from dfat.forensic_engine.parsers.base import BaseParser
+from dfat.forensic_engine.parsers.disk_access import DiskImageAccessor, FileEntry
+from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
+from dfat.shared.constants import MAX_ARTEFACTS_PER_CATEGORY
 
 
 class FileSystemParser(BaseParser):
-    """Extract filesystem metadata artefacts from disk images."""
+    """Walk a disk image and extract file/directory metadata artefacts.
+
+    Uses ``DiskImageAccessor`` for read-only pytsk3 access. Each yielded
+    ``FileEntry`` becomes one ``FILESYSTEM_METADATA`` artefact whose
+    ``raw_data`` follows the schema documented in the module docstring.
+    """
+
+    _parse_error_class = DiskParsingError
+
+    def __init__(
+        self,
+        disk_accessor: DiskImageAccessor,
+        audit_logger: ForensicAuditLogger,
+        max_artefacts: int = MAX_ARTEFACTS_PER_CATEGORY,
+    ) -> None:
+        """Initialise the filesystem metadata parser.
+
+        Args:
+            disk_accessor: Low-level pytsk3 disk image accessor.
+            audit_logger: ACPO-compliant forensic audit logger.
+            max_artefacts: Maximum artefacts retained for a single parse.
+        """
+        super().__init__(audit_logger=audit_logger, max_artefacts=max_artefacts)
+        self._disk_accessor = disk_accessor
 
     @property
     def parser_name(self) -> str:
@@ -31,70 +72,51 @@ class FileSystemParser(BaseParser):
         """Return supported evidence types."""
         return [EvidenceType.DISK_IMAGE]
 
-    def parse(self, evidence: EvidenceImage) -> ArtefactSet:
+    def _do_parse(self, evidence: EvidenceImage) -> list[Artefact]:
         """Walk the disk image filesystem and emit metadata artefacts.
 
         Args:
             evidence: Disk image evidence metadata.
 
         Returns:
-            Artefact set of filesystem metadata entries.
-
-        Raises:
-            ImportError: If ``pytsk3`` is not installed.
-            DiskParsingError: If filesystem walking fails.
+            List of ``FILESYSTEM_METADATA`` artefacts (capped by limit).
         """
-        self._log_parse_start(evidence.evidence_id)
-        _tsk_utils.require_pytsk3()
+        img_info = self._disk_accessor.open_image(Path(evidence.file_path))
         artefacts: list[Artefact] = []
         try:
-            for full_path, entry in _tsk_utils.walk_filesystem(evidence.file_path):
-                if len(artefacts) >= self._max_artefacts:
+            fs_info = self._disk_accessor.get_filesystem(img_info)
+            for entry in self._disk_accessor.walk_filesystem(fs_info):
+                if not self._check_limit(len(artefacts)):
                     break
-                try:
-                    name = entry.info.name.name.decode("utf-8", errors="replace")
-                    meta = entry.info.meta
-                    is_dir = bool(
-                        meta is not None and meta.type == meta.TYPE_DIR
-                    )
-                    artefacts.append(
-                        self._create_artefact(
-                            category=ArtefactCategory.FILESYSTEM_METADATA,
-                            evidence_id=evidence.evidence_id,
-                            source_path=full_path,
-                            raw_data={
-                                "filename": name,
-                                "path": full_path,
-                                "size": int(meta.size) if meta else 0,
-                                "created_time": _tsk_utils.meta_timestamp(
-                                    entry, "crtime"
-                                ),
-                                "modified_time": _tsk_utils.meta_timestamp(
-                                    entry, "mtime"
-                                ),
-                                "accessed_time": _tsk_utils.meta_timestamp(
-                                    entry, "atime"
-                                ),
-                                "is_deleted": bool(
-                                    meta is not None and getattr(meta, "flags", 0)
-                                ),
-                                "file_type": "directory" if is_dir else "file",
-                                "inode_number": int(meta.addr) if meta else None,
-                            },
-                        )
-                    )
-                except Exception:  # noqa: BLE001 - skip bad entries
-                    continue
-        except ImportError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            self._log_parse_error(evidence.evidence_id, exc)
-            raise DiskParsingError(
-                f"FileSystemParser failed for {evidence.file_path}",
-                context={"evidence_id": evidence.evidence_id, "error": str(exc)},
-            ) from exc
+                artefacts.append(self._entry_to_artefact(entry, evidence.evidence_id))
+        finally:
+            self._disk_accessor.close(img_info)
+        return artefacts
 
-        artefacts = self._truncate(artefacts)
-        result = self._to_artefact_set(evidence.evidence_id, artefacts)
-        self._log_parse_end(evidence.evidence_id, len(artefacts))
-        return result
+    def _entry_to_artefact(self, entry: FileEntry, evidence_id: str) -> Artefact:
+        """Map a ``FileEntry`` to a ``FILESYSTEM_METADATA`` artefact."""
+        return self._create_artefact(
+            category=ArtefactCategory.FILESYSTEM_METADATA,
+            evidence_id=evidence_id,
+            source_path=entry.path,
+            raw_data={
+                "filename": entry.name,
+                "path": entry.path,
+                "size": entry.size,
+                "created_time": self._iso_or_none(entry.created_time),
+                "modified_time": self._iso_or_none(entry.modified_time),
+                "accessed_time": self._iso_or_none(entry.accessed_time),
+                "changed_time": self._iso_or_none(entry.changed_time),
+                "is_deleted": entry.is_deleted,
+                "is_allocated": entry.is_allocated,
+                "file_type": entry.file_type,
+                "inode": entry.inode,
+            },
+        )
+
+    @staticmethod
+    def _iso_or_none(value: Optional[datetime]) -> Optional[str]:
+        """Serialize a timestamp to ISO-8601 or return ``None``."""
+        if value is None:
+            return None
+        return value.isoformat()

@@ -16,12 +16,14 @@ ROLE_PERMISSIONS: dict[str, dict[str, list[str]]] = {
         "analysis": ["create", "read"],
         "reports": ["create", "read"],
         "evaluation": ["create", "read"],
+        "cases": ["create", "read", "update"],
     },
     "analyst": {
         "evidence": ["read"],
         "analysis": ["create", "read"],
         "reports": ["read"],
         "evaluation": ["read"],
+        "cases": ["read"],
     },
     "viewer": {
         "reports": ["read"],
@@ -91,6 +93,7 @@ class PermissionChecker:
                 "analysis",
                 "reports",
                 "evaluation",
+                "cases",
                 "users",
                 "system",
             ]
