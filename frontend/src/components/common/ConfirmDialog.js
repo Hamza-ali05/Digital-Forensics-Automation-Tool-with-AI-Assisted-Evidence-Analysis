@@ -1,19 +1,9 @@
 import React from "react";
-import { Button, Modal } from "@themesberg/react-bootstrap";
+import { Button, Form, Modal } from "@themesberg/react-bootstrap";
 
 /**
  * Confirm / cancel modal for destructive and general actions.
- *
- * @param {{
- *   show: boolean,
- *   title?: string,
- *   message?: string,
- *   confirmLabel?: string,
- *   cancelLabel?: string,
- *   variant?: "danger"|"warning"|"primary",
- *   onConfirm?: () => void,
- *   onCancel?: () => void,
- * }} props
+ * Optional ``requireReason`` shows a textarea that must be filled to confirm.
  */
 export default function ConfirmDialog({
   show = false,
@@ -22,6 +12,11 @@ export default function ConfirmDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "primary",
+  requireReason = false,
+  reason = "",
+  reasonLabel = "Reason",
+  reasonError = null,
+  onReasonChange,
   onConfirm,
   onCancel,
 }) {
@@ -31,7 +26,25 @@ export default function ConfirmDialog({
         <Modal.Title>{title}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <p className="mb-0">{message}</p>
+        <p className={requireReason ? "mb-3" : "mb-0"}>{message}</p>
+        {requireReason ? (
+          <Form.Group controlId="confirm-reason">
+            <Form.Label>
+              {reasonLabel} <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={reason}
+              onChange={(e) => onReasonChange && onReasonChange(e.target.value)}
+              isInvalid={Boolean(reasonError)}
+              placeholder="Enter a reason…"
+            />
+            <Form.Control.Feedback type="invalid">
+              {reasonError}
+            </Form.Control.Feedback>
+          </Form.Group>
+        ) : null}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="link" className="text-gray-600" onClick={onCancel}>

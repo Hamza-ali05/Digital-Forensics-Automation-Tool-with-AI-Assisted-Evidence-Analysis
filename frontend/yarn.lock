@@ -3337,6 +3337,11 @@ chardet@^2.1.1:
   resolved "https://registry.npmjs.org/chardet/-/chardet-2.2.0.tgz"
   integrity sha512-rddelWYNPRrXq6PtNEN2S3f6t9ILzvqaN5pVgi4kqt9jHQaXIial9PznB5iSPVlQSLNaaH22ItWz3EJtQ10+OA==
 
+chart.js@^3.9.1:
+  version "3.9.1"
+  resolved "https://registry.npmjs.org/chart.js/-/chart.js-3.9.1.tgz"
+  integrity sha512-Ro2JbLmvg83gXF5F4sniaQ+lTbSv18E+TIf2cOeiH1Iqd2PGFOtem+DUufMZsCJwFE7ywPOpfXFBwRTGq7dh6w==
+
 chartist-plugin-tooltips-updated@^0.1.4:
   version "0.1.4"
   resolved "https://registry.npmjs.org/chartist-plugin-tooltips-updated/-/chartist-plugin-tooltips-updated-0.1.4.tgz"
@@ -9689,6 +9694,11 @@ react-chartist@^0.14.4:
   integrity sha512-1riwO5CjT5IdrilCM788waUYpIdl8Y4vsIc6Y5bbR3PIX46NYYtcq5bcaBEkIZfKEThuoJDEV6FU1rDmfbogsg==
   dependencies:
     prop-types "^15.5.8"
+
+react-chartjs-2@^3.3.0:
+  version "3.3.0"
+  resolved "https://registry.npmjs.org/react-chartjs-2/-/react-chartjs-2-3.3.0.tgz"
+  integrity sha512-4Mt0SR2aiUbWi/4762odRBYSnbNKSs4HWc0o3IW43py5bMfmfpeZU95w6mbvtuLZH/M3GsPJMU8DvDc+5U9blQ==
 
 react-copy-to-clipboard@^5.0.3:
   version "5.0.3"

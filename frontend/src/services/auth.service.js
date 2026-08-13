@@ -33,6 +33,7 @@ function clearAuthStorage() {
   localStorage.removeItem(AUTH_CONFIG.refreshTokenKey);
   localStorage.removeItem(AUTH_CONFIG.userKey);
   localStorage.removeItem(AUTH_CONFIG.tokenExpiryKey);
+  localStorage.removeItem(AUTH_CONFIG.sessionStartKey);
 }
 
 /**
@@ -51,6 +52,7 @@ export async function login(username, password) {
   );
 
   storeTokens(tokens);
+  localStorage.setItem(AUTH_CONFIG.sessionStartKey, String(Date.now()));
 
   const { data: user } = await apiGet(API_ENDPOINTS.USERS.ME);
   storeUser(user);

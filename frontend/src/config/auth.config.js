@@ -7,4 +7,5 @@ export const AUTH_CONFIG = {
   userKey: "dfat_user",
   tokenExpiryKey: "dfat_token_expiry",
   rememberMeKey: "dfat_remember_me",
+  sessionStartKey: "dfat_session_start",
 };

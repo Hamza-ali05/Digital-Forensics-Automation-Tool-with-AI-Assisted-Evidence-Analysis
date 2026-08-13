@@ -41,7 +41,7 @@ function formatLastLogin(value) {
 export default function Topbar({ onToggleSidebar }) {
   const history = useHistory();
   const { user, role, logout } = useAuth();
-  const { notifications, clearAll, info } = useNotification();
+  const { notifications, clearAll } = useNotification();
   const [aiHealthy, setAiHealthy] = useState(null);
 
   useEffect(() => {
@@ -196,19 +196,15 @@ export default function Topbar({ onToggleSidebar }) {
                 </div>
                 <Dropdown.Item
                   as={Link}
-                  to={Routes.Settings.path}
+                  to={Routes.Profile.path}
                   className="fw-bold"
                 >
                   <FontAwesomeIcon icon={faUser} className="me-2" /> Profile
                 </Dropdown.Item>
                 <Dropdown.Item
+                  as={Link}
+                  to={Routes.Profile.path}
                   className="fw-bold"
-                  onClick={() =>
-                    info(
-                      "Change password",
-                      "Password change UI will be available in Settings (Prompt 8)."
-                    )
-                  }
                 >
                   <FontAwesomeIcon icon={faKey} className="me-2" /> Change password
                 </Dropdown.Item>

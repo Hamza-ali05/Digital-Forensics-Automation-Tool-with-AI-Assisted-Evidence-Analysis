@@ -11,10 +11,20 @@ import {
   faMicrochip,
   faFileAlt,
   faChartBar,
+  faChartLine,
+  faHistory,
+  faTachometerAlt,
   faCog,
   faUsers,
+  faUserCircle,
   faTimes,
   faSignOutAlt,
+  faUserPlus,
+  faShieldAlt,
+  faClock,
+  faBug,
+  faAlignLeft,
+  faCode,
 } from "@fortawesome/free-solid-svg-icons";
 import { Badge, Button, Nav, Navbar } from "@themesberg/react-bootstrap";
 
@@ -29,6 +39,42 @@ function isNavActive(pathname, link) {
   if (link === Routes.Dashboard.path) {
     return pathname === link;
   }
+  if (link === Routes.Evidence.path) {
+    if (pathname === link) return true;
+    if (
+      pathname.startsWith("/evidence/register") ||
+      pathname.startsWith("/evidence/integrity")
+    ) {
+      return false;
+    }
+    return pathname.startsWith(`${link}/`);
+  }
+  if (link === Routes.Pipeline.path) {
+    if (pathname === link) return true;
+    if (pathname.startsWith("/pipeline/run")) {
+      return false;
+    }
+    return pathname.startsWith(`${link}/`);
+  }
+  if (link === Routes.ArtefactsTimeline.path || link === Routes.ArtefactsIOCs.path) {
+    return pathname === link;
+  }
+  if (link === Routes.AISummary.path || link === Routes.JSONViewer.path) {
+    return pathname === link;
+  }
+  if (link === Routes.AIAnalysis.path) {
+    return (
+      pathname === link ||
+      pathname.startsWith("/artefacts/timeline") ||
+      pathname.startsWith("/artefacts/iocs") ||
+      pathname.startsWith("/ai/summary")
+    );
+  }
+  if (link === Routes.Reports.path) {
+    if (pathname === link) return true;
+    if (pathname.startsWith("/reports/json")) return true;
+    return pathname.startsWith(`${link}/`);
+  }
   return pathname === link || pathname.startsWith(`${link}/`);
 }
 
@@ -38,8 +84,9 @@ function isNavActive(pathname, link) {
 export default function Sidebar({ show = false, onClose, onToggle }) {
   const location = useLocation();
   const { pathname } = location;
-  const { logout } = useAuth();
+  const { logout, user, role } = useAuth();
   const { canRead: canManageUsers } = usePermission("users");
+  const canRegister = role === "admin" || role === "investigator";
 
   const [healthOk, setHealthOk] = useState(null);
   const [activeCaseCount, setActiveCaseCount] = useState(0);
@@ -146,7 +193,17 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
           <div className="sidebar-inner px-4 pt-3 d-flex flex-column" style={{ minHeight: "100%" }}>
             <div className="user-card d-flex d-md-none align-items-center justify-content-between pb-4">
               <div className="d-block">
-                <h6 className="mb-1">{config.appName}</h6>
+                <h6 className="mb-1">{user?.username || config.appName}</h6>
+                <Button
+                  as={Link}
+                  to={Routes.Profile.path}
+                  variant="secondary"
+                  size="xs"
+                  className="text-dark me-2"
+                  onClick={onClose}
+                >
+                  Profile
+                </Button>
                 <Button
                   variant="secondary"
                   size="xs"
@@ -186,6 +243,11 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                 icon={faDatabase}
               />
               <NavItem
+                title="Integrity Check"
+                link={Routes.EvidenceIntegrity.path}
+                icon={faShieldAlt}
+              />
+              <NavItem
                 title="Pipeline"
                 link={Routes.Pipeline.path}
                 icon={faPlayCircle}
@@ -196,26 +258,152 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                 link={Routes.AIAnalysis.path}
                 icon={faMicrochip}
               />
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.ArtefactsTimeline.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.ArtefactsTimeline.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faClock} />{" "}
+                  </span>
+                  <span className="sidebar-text">Timeline</span>
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.ArtefactsIOCs.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.ArtefactsIOCs.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faBug} />{" "}
+                  </span>
+                  <span className="sidebar-text">IOCs</span>
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.AISummary.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.AISummary.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faAlignLeft} />{" "}
+                  </span>
+                  <span className="sidebar-text">Summary</span>
+                </Nav.Link>
+              </Nav.Item>
               <NavItem title="Reports" link={Routes.Reports.path} icon={faFileAlt} />
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.JSONViewer.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.JSONViewer.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faCode} />{" "}
+                  </span>
+                  <span className="sidebar-text">JSON Artefacts</span>
+                </Nav.Link>
+              </Nav.Item>
               <NavItem
                 title="Evaluation"
                 link={Routes.Evaluation.path}
                 icon={faChartBar}
               />
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.EvaluationBenchmark.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.EvaluationBenchmark.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faChartLine} />{" "}
+                  </span>
+                  <span className="sidebar-text">Benchmark</span>
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.EvaluationBenchmarkHistory.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.EvaluationBenchmarkHistory.path
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faHistory} />{" "}
+                  </span>
+                  <span className="sidebar-text">History</span>
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item className="ms-3">
+                <Nav.Link
+                  as={Link}
+                  to={Routes.EvaluationPerformance.path}
+                  className={`d-flex align-items-center py-1 ${
+                    pathname === Routes.EvaluationPerformance.path ? "active" : ""
+                  }`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar-icon">
+                    <FontAwesomeIcon icon={faTachometerAlt} />{" "}
+                  </span>
+                  <span className="sidebar-text">Performance</span>
+                </Nav.Link>
+              </Nav.Item>
 
-              {canManageUsers ? (
+              {canManageUsers || canRegister ? (
                 <>
                   <Nav.Item className="my-2">
                     <hr className="border-light opacity-25 my-2" />
                   </Nav.Item>
-                  <NavItem title="Settings" link={Routes.Settings.path} icon={faCog} />
-                  <NavItem
-                    title="User Management"
-                    link={Routes.SettingsUsers.path}
-                    icon={faUsers}
-                  />
+                  <NavItem title="Profile" link={Routes.Profile.path} icon={faUserCircle} />
+                  {canRegister ? (
+                    <NavItem
+                      title="Register user"
+                      link={Routes.Register.path}
+                      icon={faUserPlus}
+                    />
+                  ) : null}
+                  {canManageUsers ? (
+                    <>
+                      <NavItem title="Settings" link={Routes.Settings.path} icon={faCog} />
+                      <NavItem
+                        title="User Management"
+                        link={Routes.SettingsUsers.path}
+                        icon={faUsers}
+                      />
+                    </>
+                  ) : null}
                 </>
-              ) : null}
+              ) : (
+                <>
+                  <Nav.Item className="my-2">
+                    <hr className="border-light opacity-25 my-2" />
+                  </Nav.Item>
+                  <NavItem title="Profile" link={Routes.Profile.path} icon={faUserCircle} />
+                </>
+              )}
             </Nav>
 
             <div className="sidebar-footer mt-auto pt-3 pb-4 small">

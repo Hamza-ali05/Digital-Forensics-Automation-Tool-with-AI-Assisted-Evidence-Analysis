@@ -1,22 +1,101 @@
-import React from "react";
+import React, { useState } from "react";
+import { useHistory } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faAngleLeft, faUnlockAlt, faUser } from "@fortawesome/free-solid-svg-icons";
-import { Col, Row, Form, Card, Button, FormCheck, Container, InputGroup } from "@themesberg/react-bootstrap";
-import { Link } from "react-router-dom";
+import { faUnlockAlt, faUser } from "@fortawesome/free-solid-svg-icons";
+import {
+  Alert,
+  Button,
+  Col,
+  Container,
+  Form,
+  FormCheck,
+  InputGroup,
+  Row,
+  Spinner,
+} from "@themesberg/react-bootstrap";
 
-import { Routes } from "../../routes";
+import { AUTH_CONFIG } from "config/auth.config";
+import useAuth from "hooks/useAuth";
+import useLocalStorage from "hooks/useLocalStorage";
+import useNotification from "hooks/useNotification";
+import { validateRequired } from "utils/validators";
+import { Routes } from "routes";
 import BgImage from "../../assets/img/illustrations/signin.svg";
 
-/** Login shell — API wiring arrives in later Prompt 7 steps. */
-export default () => (
-  <main>
-    <section className="d-flex align-items-center my-5 mt-lg-6 mb-lg-5">
+function formatLockoutRemaining(lockedUntil) {
+  if (!lockedUntil) return null;
+  const until = new Date(lockedUntil).getTime();
+  if (Number.isNaN(until)) return null;
+  const ms = until - Date.now();
+  if (ms <= 0) return "a short time";
+  const minutes = Math.ceil(ms / 60000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.ceil(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+/**
+ * DFAT login — username/password against OAuth2 token endpoint.
+ */
+export default function Login() {
+  const history = useHistory();
+  const { login } = useAuth();
+  const { error: notifyError } = useNotification();
+  const [rememberMe, setRememberMe] = useLocalStorage(
+    AUTH_CONFIG.rememberMeKey,
+    false
+  );
+
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const validate = () => {
+    const next = {};
+    const userErr = validateRequired(username, "Username");
+    const passErr = validateRequired(password, "Password");
+    if (userErr) next.username = userErr;
+    if (passErr) next.password = passErr;
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError(null);
+    if (!validate()) return;
+
+    setSubmitting(true);
+    try {
+      await login(username.trim(), password);
+      // rememberMe already persisted via useLocalStorage setter
+      history.replace(Routes.Dashboard.path);
+    } catch (err) {
+      const status = err?.status;
+      if (status === 423) {
+        const remaining = formatLockoutRemaining(err?.details?.locked_until);
+        setFormError(
+          remaining
+            ? `Account locked. Try again in ${remaining}.`
+            : "Account locked. Please try again later."
+        );
+      } else if (status === 401) {
+        setFormError("Invalid username or password.");
+      } else {
+        setFormError(err?.message || "Sign in failed. Please try again.");
+        notifyError("Sign in failed", err?.message || "Unexpected error");
+      }
+      // Keep password field on failure (do not clear).
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="d-flex align-items-center my-4 mt-lg-5 mb-lg-5">
       <Container>
-        <p className="text-center">
-          <Card.Link as={Link} to={Routes.Dashboard.path} className="text-gray-700">
-            <FontAwesomeIcon icon={faAngleLeft} className="me-2" /> Back to dashboard
-          </Card.Link>
-        </p>
         <Row
           className="justify-content-center form-bg-image"
           style={{ backgroundImage: `url(${BgImage})` }}
@@ -25,9 +104,16 @@ export default () => (
             <div className="bg-white shadow-soft border rounded border-light p-4 p-lg-5 w-100 fmxw-500">
               <div className="text-center text-md-center mb-4 mt-md-0">
                 <h3 className="mb-0">Sign in to DFAT</h3>
-                <p className="text-gray">Digital Forensics Automation Tool</p>
+                <p className="text-gray mb-0">Digital Forensics Automation Tool</p>
               </div>
-              <Form className="mt-4">
+
+              {formError ? (
+                <Alert variant="danger" className="mb-3">
+                  {formError}
+                </Alert>
+              ) : null}
+
+              <Form className="mt-3" onSubmit={handleSubmit} noValidate>
                 <Form.Group id="username" className="mb-4">
                   <Form.Label>Username</Form.Label>
                   <InputGroup>
@@ -39,36 +125,82 @@ export default () => (
                       required
                       type="text"
                       placeholder="investigator"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      isInvalid={Boolean(fieldErrors.username)}
+                      disabled={submitting}
+                      autoComplete="username"
                     />
+                    <Form.Control.Feedback type="invalid">
+                      {fieldErrors.username}
+                    </Form.Control.Feedback>
                   </InputGroup>
                 </Form.Group>
+
                 <Form.Group id="password" className="mb-4">
                   <Form.Label>Password</Form.Label>
                   <InputGroup>
                     <InputGroup.Text>
                       <FontAwesomeIcon icon={faUnlockAlt} />
                     </InputGroup.Text>
-                    <Form.Control required type="password" placeholder="Password" />
+                    <Form.Control
+                      required
+                      type="password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      isInvalid={Boolean(fieldErrors.password)}
+                      disabled={submitting}
+                      autoComplete="current-password"
+                    />
+                    <Form.Control.Feedback type="invalid">
+                      {fieldErrors.password}
+                    </Form.Control.Feedback>
                   </InputGroup>
                 </Form.Group>
+
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <Form.Check type="checkbox">
-                    <FormCheck.Input id="rememberMe" className="me-2" />
+                    <FormCheck.Input
+                      id="rememberMe"
+                      className="me-2"
+                      checked={Boolean(rememberMe)}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      disabled={submitting}
+                    />
                     <FormCheck.Label htmlFor="rememberMe" className="mb-0">
                       Remember me
                     </FormCheck.Label>
                   </Form.Check>
                 </div>
-                <Button variant="primary" type="submit" className="w-100">
-                  Sign in
+
+                <Button
+                  variant="primary"
+                  type="submit"
+                  className="w-100"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <Spinner
+                        as="span"
+                        animation="border"
+                        size="sm"
+                        role="status"
+                        className="me-2"
+                      />
+                      Signing in…
+                    </>
+                  ) : (
+                    "Sign in"
+                  )}
                 </Button>
               </Form>
+
               <div className="d-flex justify-content-center align-items-center mt-4">
-                <span className="fw-normal">
-                  Need an account?{" "}
-                  <Card.Link as={Link} to={Routes.Register.path} className="fw-bold">
-                    Register
-                  </Card.Link>
+                <span className="fw-normal text-muted small text-center">
+                  Need an account? Ask an administrator or investigator to
+                  register you via the in-app registration flow.
                 </span>
               </div>
             </div>
@@ -76,5 +208,5 @@ export default () => (
         </Row>
       </Container>
     </section>
-  </main>
-);
+  );
+}

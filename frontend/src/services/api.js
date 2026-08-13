@@ -33,6 +33,7 @@ function clearAuthStorage() {
   localStorage.removeItem(AUTH_CONFIG.refreshTokenKey);
   localStorage.removeItem(AUTH_CONFIG.userKey);
   localStorage.removeItem(AUTH_CONFIG.tokenExpiryKey);
+  localStorage.removeItem(AUTH_CONFIG.sessionStartKey);
 }
 
 /**

@@ -10,7 +10,13 @@ import {
 import EmptyState from "components/common/EmptyState";
 
 function getRowKey(row, index) {
-  return row?.id ?? row?.uuid ?? row?.key ?? index;
+  return (
+    row?.artefact_id ??
+    row?.id ??
+    row?.uuid ??
+    row?.key ??
+    index
+  );
 }
 
 function cellValue(row, column) {
@@ -38,6 +44,8 @@ export default function DataTable({
   selectable = false,
   onSelect,
   actions,
+  getRowClassName,
+  getRowStyle,
 }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
@@ -153,8 +161,16 @@ export default function DataTable({
           ) : (
             rows.map((row, index) => {
               const key = getRowKey(row, index);
+              const className =
+                typeof getRowClassName === "function"
+                  ? getRowClassName(row, index)
+                  : undefined;
+              const style =
+                typeof getRowStyle === "function"
+                  ? getRowStyle(row, index)
+                  : undefined;
               return (
-                <tr key={key}>
+                <tr key={key} className={className} style={style}>
                   {selectable ? (
                     <td>
                       <Form.Check

@@ -22,6 +22,11 @@ export const EVIDENCE_STATUS = Object.freeze({
   ARCHIVED: "archived",
 });
 
+export const EVIDENCE_TYPE = Object.freeze({
+  DISK_IMAGE: "disk_image",
+  MEMORY_DUMP: "memory_dump",
+});
+
 export const ARTEFACT_CATEGORY = Object.freeze({
   FILESYSTEM_METADATA: "filesystem_metadata",
   REGISTRY_KEY: "registry_key",
@@ -82,14 +87,35 @@ export const EVIDENCE_STATUS_COLOURS = Object.freeze({
   archived: "#adb5bd",
 });
 
+export const JOB_STATUS = Object.freeze({
+  QUEUED: "queued",
+  INITIALISING: "initialising",
+  RUNNING: "running",
+  STAGE_COMPLETE: "stage_complete",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+  TIMED_OUT: "timed_out",
+});
+
+export const PIPELINE_MODE = Object.freeze({
+  FULL: "full",
+  PARSE_ONLY: "parse-only",
+  TRIAGE_ONLY: "triage-only",
+});
+
 export const PIPELINE_STATUS_COLOURS = Object.freeze({
   queued: "#6c757d",
   pending: "#6c757d",
+  initialising: "#0dcaf0",
+  initializing: "#0dcaf0",
   running: "#0d6efd",
   in_progress: "#0d6efd",
+  stage_complete: "#0d6efd",
   completed: "#198754",
   succeeded: "#198754",
   failed: "#dc3545",
   cancelled: "#adb5bd",
   canceled: "#adb5bd",
+  timed_out: "#dc3545",
 });

@@ -106,6 +106,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const logoutAll = useCallback(async () => {
+    try {
+      await authService.logoutAll();
+    } finally {
+      setUser(null);
+    }
+  }, []);
+
   const register = useCallback(async (data) => {
     return authService.register(data);
   }, []);
@@ -118,10 +126,11 @@ export function AuthProvider({ children }) {
       isLoading,
       login,
       logout,
+      logoutAll,
       register,
       refreshUser,
     }),
-    [user, role, isLoading, login, logout, register, refreshUser]
+    [user, role, isLoading, login, logout, logoutAll, register, refreshUser]
   );
 
   // Keep derived flag consistent with memo (avoid stale isAuthenticated const above).
