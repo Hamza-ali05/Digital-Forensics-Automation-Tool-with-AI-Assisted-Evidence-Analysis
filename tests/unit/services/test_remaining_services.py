@@ -14,6 +14,7 @@ from dfat.core.models.evaluation import BenchmarkResult, UsabilityResponse
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
 from dfat.core.models.pipeline import AuditEntry, PipelineState
 from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
+from dfat.evaluation.benchmark.dfrws_handler import GroundTruth
 from dfat.pipeline.enums import JobStatus
 from dfat.services.analysis_service import AnalysisService
 from dfat.services.evaluation_service import EvaluationService
@@ -102,7 +103,19 @@ async def test_report_service_getters() -> None:
     report_repo.get.return_value = report
     report_repo.list_all.return_value = [report]
     report_repo.get_by_case.return_value = [report]
-    service = ReportService(report_repo, AsyncMock())
+    service = ReportService(
+        report_repo=report_repo,
+        audit_repo=AsyncMock(),
+        pdf_exporter=MagicMock(),
+        html_exporter=MagicMock(),
+        json_file_exporter=MagicMock(),
+        integrity_verifier=MagicMock(),
+        reproducibility_verifier=MagicMock(),
+        custody_report_generator=AsyncMock(),
+        audit_report_generator=AsyncMock(),
+        case_repo=AsyncMock(),
+        evidence_repo=AsyncMock(),
+    )
 
     # Act
     full = await service.get_report("rep-1")
@@ -195,17 +208,28 @@ async def test_evaluation_service_benchmark_and_usability(
     usability_repo = AsyncMock()
     usability_repo.save.return_value = "u1"
     usability_repo.get_all_responses.return_value = [response]
-    comparator = MagicMock()
+    comparator = AsyncMock()
     comparator.compare.return_value = result
     loader = MagicMock()
-    loader.load.return_value = {"dataset_name": "dfrws", "artefacts": []}
+    loader.load.return_value = GroundTruth(
+        dataset_name="dfrws",
+        source="DFRWS",
+        artefacts=[],
+        categories=[],
+    )
     audit_repo = AsyncMock(get_latest_entry_number=AsyncMock(return_value=0))
+    artefact_repo = AsyncMock()
+    response_collector = AsyncMock()
+    performance_analyzer = AsyncMock()
     service = EvaluationService(
         benchmark_repo=benchmark_repo,
         usability_repo=usability_repo,
         benchmark_comparator=comparator,
         ground_truth_loader=loader,
         audit_repo=audit_repo,
+        artefact_repo=artefact_repo,
+        response_collector=response_collector,
+        performance_analyzer=performance_analyzer,
     )
     start = datetime(2024, 1, 1, tzinfo=UTC)
     end = datetime(2024, 1, 1, 0, 1, tzinfo=UTC)
@@ -228,4 +252,6 @@ async def test_evaluation_service_benchmark_and_usability(
     assert bench.benchmark_id == "b1"
     assert saved_id == "u1"
     assert listed
-    assert analysis["response_count"] == 1
+    assert analysis["total_responses"] == 1
+    assert "usefulness_percentage" in analysis
+    assert "tobin_comparison" in analysis

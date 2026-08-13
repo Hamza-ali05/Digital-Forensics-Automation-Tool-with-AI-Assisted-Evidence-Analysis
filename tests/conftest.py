@@ -18,8 +18,14 @@ from dfat.auth.password import PasswordHasher
 from dfat.core.enums import ArtefactCategory, EvidenceType, HashAlgorithm, SuspicionLevel
 from dfat.core.models.artefact import Artefact, ArtefactSet, RankedArtefact
 from dfat.core.models.case import Case, CaseInvestigator
+from dfat.core.models.evaluation import BenchmarkResult, UsabilityResponse
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
+from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
 from dfat.case_management.enums import CaseStatus, CustodyAction
+from dfat.evaluation.benchmark.dfrws_handler import GroundTruth
+from dfat.evaluation.benchmark.ground_truth import GroundTruthLoader
+from dfat.evaluation.benchmark.cfreds_handler import CFReDSHandler
+from dfat.evaluation.benchmark.dfrws_handler import DFRWSHandler
 from dfat.evidence_management.models import ChainOfCustodyRecord, HashSet
 from dfat.database.engine import DatabaseEngine
 from dfat.database.models.user import RoleORM, UserORM
@@ -180,6 +186,133 @@ def sample_ranked_artefacts(sample_artefact_set: ArtefactSet) -> list[RankedArte
             )
         )
     return ranked
+
+
+@pytest.fixture
+def sample_json_report(
+    sample_artefact_set: ArtefactSet,
+    sample_ranked_artefacts: list[RankedArtefact],
+) -> JSONReport:
+    """Return a structured JSON report fixture for reporting tests."""
+    return JSONReport(
+        report_id="11111111-1111-1111-1111-111111111111",
+        evidence_id=sample_artefact_set.evidence_id,
+        artefact_data=[
+            {
+                "artefact_id": item.artefact_id,
+                "category": item.category.value,
+                "source_path": item.source_path,
+                "suspicion_level": item.suspicion_level.value,
+                "relevance_score": item.relevance_score,
+                "raw_data": item.raw_data,
+                "classification_reasoning": item.classification_reasoning,
+                "metadata": dict(item.metadata),
+            }
+            for item in sample_ranked_artefacts
+        ],
+        schema_version="1.0.0",
+        integrity_hash="a" * 64,
+        generated_at=datetime(2024, 1, 15, 12, 30, 0, tzinfo=UTC),
+    )
+
+
+@pytest.fixture
+def sample_forensic_report(
+    sample_case_metadata: CaseMetadata,
+    sample_json_report: JSONReport,
+) -> ForensicReport:
+    """Return a dual-output ForensicReport fixture."""
+    return ForensicReport(
+        report_id="22222222-2222-2222-2222-222222222222",
+        case=sample_case_metadata,
+        json_report=sample_json_report,
+        narrative_report=NarrativeReport(
+            report_id="33333333-3333-3333-3333-333333333333",
+            evidence_id=sample_json_report.evidence_id,
+            summary_text=(
+                "Investigative narrative.\n\n"
+                "DISCLAIMER: AI-generated content is advisory "
+                "(Scanlon et al., 2023)."
+            ),
+            llm_model_used="llama3",
+            generation_parameters={"temperature": 0.1},
+            generated_at=datetime(2024, 1, 15, 12, 31, 0, tzinfo=UTC),
+        ),
+        pipeline_duration_seconds=42.5,
+        stage_timings={
+            "acquisition_seconds": 5.0,
+            "parsing_seconds": 20.0,
+            "triage_seconds": 12.0,
+            "reporting_seconds": 5.5,
+        },
+    )
+
+
+@pytest.fixture
+def sample_benchmark_result() -> BenchmarkResult:
+    """Return a deterministic BenchmarkResult fixture."""
+    return BenchmarkResult(
+        benchmark_id="44444444-4444-4444-4444-444444444444",
+        dataset_name="dfrws_sample",
+        precision=0.8,
+        recall=0.8,
+        f1_score=0.8,
+        time_to_triage_seconds=12.5,
+        artefacts_expected=10,
+        artefacts_recovered=10,
+        false_positives=2,
+        false_negatives=2,
+        evaluated_at=datetime(2024, 1, 15, 13, 0, 0, tzinfo=UTC),
+    )
+
+
+@pytest.fixture
+def sample_usability_responses() -> list[UsabilityResponse]:
+    """Return 10 anonymised usability responses with known ratings.
+
+    Seven of ten have avg(Q1,Q4) >= 4 → usefulness percentage = 70%.
+    """
+    patterns = [
+        (5, 5, 5, 5, 5),
+        (4, 4, 4, 4, 4),
+        (5, 3, 4, 3, 4),  # avg 4.0
+        (4, 5, 5, 4, 5),
+        (5, 4, 3, 4, 4),
+        (4, 4, 4, 5, 3),
+        (5, 5, 4, 4, 5),
+        (3, 3, 3, 3, 3),  # below
+        (2, 3, 2, 2, 2),  # below
+        (3, 2, 3, 3, 3),  # below
+    ]
+    responses: list[UsabilityResponse] = []
+    for index, (q1, q4, accuracy, clarity, comparative) in enumerate(patterns):
+        usefulness = round((q1 + q4) / 2)
+        responses.append(
+            UsabilityResponse(
+                participant_id=f"{index:08d}-1111-1111-1111-111111111111",
+                usefulness_rating=max(1, min(5, usefulness)),
+                accuracy_rating=accuracy,
+                clarity_rating=clarity,
+                q1_rating=q1,
+                q4_rating=q4,
+                comparative_rating=comparative,
+                free_text_feedback=f"Feedback {index}" if index % 3 == 0 else None,
+                submitted_at=datetime(2024, 1, 15, 14, index, 0, tzinfo=UTC),
+            )
+        )
+    return responses
+
+
+@pytest.fixture
+def sample_ground_truth(fixtures_dir: Path) -> GroundTruth:
+    """Load the DFRWS sample ground-truth fixture (10 artefacts)."""
+    path = fixtures_dir / "ground_truth" / "dfrws_sample.json"
+    loader = GroundTruthLoader(
+        path.parent,
+        DFRWSHandler(path.parent),
+        CFReDSHandler(path.parent),
+    )
+    return loader.load(path)
 
 
 @pytest.fixture

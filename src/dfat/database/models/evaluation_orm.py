@@ -38,5 +38,8 @@ class UsabilityRecordORM(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     usefulness_rating: Mapped[int] = mapped_column(Integer)
     accuracy_rating: Mapped[int] = mapped_column(Integer)
     clarity_rating: Mapped[int] = mapped_column(Integer)
+    q1_rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    q4_rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    comparative_rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     free_text_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -24,3 +24,7 @@ DFAT ADRs capture research-oriented design choices for the DSR artefact.
 | [ADR-018](018-hallucination-mitigation.md) | Hallucination Mitigation |
 | [ADR-019](019-prompt-versioning.md) | Prompt Versioning |
 | [ADR-020](020-rule-based-triage-primary.md) | Rule-Based Triage Primary |
+| [ADR-021](021-json-layer-primary-record.md) | JSON Layer as Primary Evidential Record |
+| [ADR-022](022-report-schema-versioning.md) | Report Schema Versioning |
+| [ADR-023](023-questionnaire-immutability.md) | Questionnaire Instrument Immutability |
+| [ADR-024](024-tobin-comparability.md) | Tobin et al. Comparability |

@@ -1,4 +1,4 @@
-"""Ground-truth loaders for DFRWS and CFReDS benchmark datasets."""
+"""Generic ground-truth loader with DFRWS / CFReDS auto-detection."""
 
 from __future__ import annotations
 
@@ -8,170 +8,125 @@ from typing import Any
 
 from dfat.core.enums import ArtefactCategory
 from dfat.core.exceptions import EvaluationError, GroundTruthNotFoundError
+from dfat.evaluation.benchmark.cfreds_handler import CFReDSHandler
+from dfat.evaluation.benchmark.dfrws_handler import DFRWSHandler, GroundTruth
 
 
 class GroundTruthLoader:
-    """Load and validate DFRWS/CFReDS-style ground-truth JSON files."""
+    """Facade that auto-detects ground-truth format and delegates to handlers."""
 
-    def __init__(self, ground_truth_dir: Path) -> None:
-        """Initialise the loader.
-
-        Args:
-            ground_truth_dir: Directory containing ground-truth JSON files.
-        """
-        self._ground_truth_dir = ground_truth_dir
-
-    def load_dfrws(self, dataset_name: str) -> dict[str, Any]:
-        """Load a DFRWS challenge ground-truth file.
+    def __init__(
+        self,
+        ground_truth_dir: Path,
+        dfrws: DFRWSHandler,
+        cfreds: CFReDSHandler,
+    ) -> None:
+        """Initialise the generic loader.
 
         Args:
-            dataset_name: Dataset basename (with or without ``.json``).
-
-        Returns:
-            Validated ground-truth mapping.
-
-        Raises:
-            GroundTruthNotFoundError: If the dataset file is missing.
-            EvaluationError: If the structure is invalid.
+            ground_truth_dir: Root directory of pre-placed ground-truth files.
+            dfrws: DFRWS-specific handler.
+            cfreds: CFReDS-specific handler.
         """
-        path = self._resolve_named_path(dataset_name, preferred_subdir="dfrws")
-        data = self.load(path)
-        data.setdefault("source", "dfrws")
-        return data
+        self._ground_truth_dir = Path(ground_truth_dir)
+        self._dfrws = dfrws
+        self._cfreds = cfreds
 
-    def load_cfreds(self, dataset_name: str) -> dict[str, Any]:
-        """Load a CFReDS ground-truth file.
-
-        Args:
-            dataset_name: Dataset basename (with or without ``.json``).
-
-        Returns:
-            Validated ground-truth mapping.
-
-        Raises:
-            GroundTruthNotFoundError: If the dataset file is missing.
-            EvaluationError: If the structure is invalid.
-        """
-        path = self._resolve_named_path(dataset_name, preferred_subdir="cfreds")
-        data = self.load(path)
-        data.setdefault("source", "cfreds")
-        return data
-
-    def load(self, dataset_path: Path) -> dict[str, Any]:
-        """Load and validate a ground-truth JSON file.
+    def load(self, dataset_path: Path) -> GroundTruth:
+        """Load a ground-truth file, auto-detecting DFRWS vs CFReDS format.
 
         Args:
             dataset_path: Path to a ground-truth JSON document.
 
         Returns:
-            Validated ground-truth mapping.
+            Typed ``GroundTruth`` model.
 
         Raises:
             GroundTruthNotFoundError: If the path does not exist.
             EvaluationError: If JSON or structure validation fails.
         """
-        if not dataset_path.exists() or not dataset_path.is_file():
+        path = Path(dataset_path)
+        if not path.exists() or not path.is_file():
             raise GroundTruthNotFoundError(
-                f"Ground-truth dataset not found: {dataset_path}",
-                context={"path": str(dataset_path)},
+                f"Ground-truth dataset not found: {path}",
+                context={"path": str(path)},
             )
+        fmt = self._detect_format(path)
+        if fmt == "cfreds":
+            return self._cfreds.load_from_path(path)
+        return self._dfrws.load_from_path(path)
+
+    def load_dfrws(self, name: str) -> GroundTruth:
+        """Load a DFRWS dataset by name via ``DFRWSHandler``."""
+        return self._dfrws.load_ground_truth(name)
+
+    def load_cfreds(self, name: str) -> GroundTruth:
+        """Load a CFReDS dataset by name via ``CFReDSHandler``."""
+        return self._cfreds.load_ground_truth(name)
+
+    def list_all_datasets(self) -> dict[str, list[str]]:
+        """List pre-placed datasets for both sources.
+
+        Returns:
+            Mapping ``{"dfrws": [...], "cfreds": [...]}`` of dataset names.
+            Never downloads anything.
+        """
+        return {
+            "dfrws": self._dfrws.list_available_datasets(),
+            "cfreds": self._cfreds.list_available_datasets(),
+        }
+
+    def get_expected_artefact_count(self, gt: GroundTruth) -> int:
+        """Return the number of expected artefacts in ``gt``."""
+        return int(gt.total_count)
+
+    def get_expected_categories(self, gt: GroundTruth) -> list[ArtefactCategory]:
+        """Return distinct expected artefact categories from ``gt``."""
+        if gt.categories:
+            return list(gt.categories)
+        return sorted(
+            {artefact.category for artefact in gt.artefacts},
+            key=lambda item: item.value,
+        )
+
+    def _detect_format(self, path: Path) -> str:
+        """Detect whether ``path`` is CFReDS or DFRWS format.
+
+        Returns:
+            ``\"cfreds\"`` or ``\"dfrws\"``.
+        """
+        parts = {part.lower() for part in path.parts}
+        if "cfreds" in parts and "dfrws" not in parts:
+            return "cfreds"
+        if "dfrws" in parts and "cfreds" not in parts:
+            return "dfrws"
+
         try:
-            with dataset_path.open("r", encoding="utf-8") as handle:
+            with path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
         except json.JSONDecodeError as exc:
             raise EvaluationError(
-                f"Invalid ground-truth JSON: {dataset_path}",
-                context={"path": str(dataset_path), "error": str(exc)},
+                f"Invalid ground-truth JSON: {path}",
+                context={"path": str(path), "error": str(exc)},
             ) from exc
+
         if not isinstance(data, dict):
             raise EvaluationError(
                 "Ground-truth root must be a JSON object",
-                context={"path": str(dataset_path)},
-            )
-        self._validate_structure(data, dataset_path)
-        return data
-
-    def get_expected_artefact_count(self, ground_truth: dict[str, Any]) -> int:
-        """Return the number of expected artefacts.
-
-        Args:
-            ground_truth: Loaded ground-truth mapping.
-
-        Returns:
-            Expected artefact count.
-        """
-        artefacts = ground_truth.get("artefacts", [])
-        return len(artefacts) if isinstance(artefacts, list) else 0
-
-    def get_expected_categories(
-        self,
-        ground_truth: dict[str, Any],
-    ) -> list[ArtefactCategory]:
-        """Return distinct expected artefact categories.
-
-        Args:
-            ground_truth: Loaded ground-truth mapping.
-
-        Returns:
-            Sorted list of ``ArtefactCategory`` values present in ground truth.
-        """
-        categories: set[ArtefactCategory] = set()
-        for entry in ground_truth.get("artefacts", []):
-            if not isinstance(entry, dict):
-                continue
-            raw = str(entry.get("category", "")).strip().lower()
-            try:
-                categories.add(ArtefactCategory(raw))
-            except ValueError:
-                continue
-        return sorted(categories, key=lambda item: item.value)
-
-    def _resolve_named_path(self, dataset_name: str, preferred_subdir: str) -> Path:
-        """Resolve a dataset name to a file under the ground-truth directory."""
-        name = dataset_name if dataset_name.endswith(".json") else f"{dataset_name}.json"
-        candidates = [
-            self._ground_truth_dir / preferred_subdir / name,
-            self._ground_truth_dir / name,
-        ]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-        raise GroundTruthNotFoundError(
-            f"Ground-truth dataset not found: {dataset_name}",
-            context={
-                "dataset_name": dataset_name,
-                "searched": [str(path) for path in candidates],
-            },
-        )
-
-    @staticmethod
-    def _validate_structure(data: dict[str, Any], path: Path) -> None:
-        """Validate the expected ground-truth schema."""
-        if "dataset_name" not in data or not isinstance(data["dataset_name"], str):
-            raise EvaluationError(
-                "Ground truth missing string field 'dataset_name'",
                 context={"path": str(path)},
             )
-        artefacts = data.get("artefacts")
-        if not isinstance(artefacts, list):
-            raise EvaluationError(
-                "Ground truth missing list field 'artefacts'",
-                context={"path": str(path)},
-            )
-        for index, entry in enumerate(artefacts):
-            if not isinstance(entry, dict):
-                raise EvaluationError(
-                    f"Ground-truth artefact at index {index} must be an object",
-                    context={"path": str(path)},
-                )
-            for field in ("category", "identifier"):
-                if field not in entry:
-                    raise EvaluationError(
-                        f"Ground-truth artefact missing '{field}' at index {index}",
-                        context={"path": str(path)},
-                    )
-            if "expected_data" in entry and not isinstance(entry["expected_data"], dict):
-                raise EvaluationError(
-                    f"Ground-truth 'expected_data' must be an object at index {index}",
-                    context={"path": str(path)},
-                )
+
+        source = str(data.get("source") or "").lower()
+        if source == "cfreds":
+            return "cfreds"
+        if source == "dfrws":
+            return "dfrws"
+
+        if any(key in data for key in ("items", "findings", "expected_artefacts")):
+            return "cfreds"
+        nested = data.get("ground_truth")
+        if isinstance(nested, dict) and isinstance(nested.get("artefacts"), list):
+            return "cfreds"
+
+        # Default to DFRWS shared schema when ambiguous.
+        return "dfrws"

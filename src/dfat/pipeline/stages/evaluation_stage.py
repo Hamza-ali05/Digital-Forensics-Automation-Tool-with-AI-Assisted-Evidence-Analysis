@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -133,18 +133,22 @@ class EvaluationStage(IPipelineStage):
             ground_truth = self._ground_truth.load(ground_truth_path)
             dataset_name = str(
                 context.metadata.get("ground_truth_dataset")
-                or ground_truth.get("dataset_name")
+                or ground_truth.dataset_name
                 or ground_truth_path.stem
             )
-            ground_truth["dataset_name"] = dataset_name
+            ground_truth.dataset_name = dataset_name
 
             pipeline_start = self._pipeline_start(context)
             pipeline_end = datetime.now(UTC)
-            result = self._comparator.compare(
+            if pipeline_end <= pipeline_start:
+                pipeline_start = pipeline_end - timedelta(seconds=1)
+            result = await self._comparator.compare(
                 recovered=context.artefact_set,
                 ground_truth=ground_truth,
                 pipeline_start=pipeline_start,
                 pipeline_end=pipeline_end,
+                dataset_name=dataset_name,
+                user_id=job.user_id,
             )
 
             duration = time.perf_counter() - started

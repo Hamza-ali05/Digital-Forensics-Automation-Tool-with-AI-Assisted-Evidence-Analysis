@@ -1,0 +1,65 @@
+{
+  "name": "cfreds_sample",
+  "source": "cfreds",
+  "description": "CFReDS-format 10-artefact ground truth fixture (alternate field names)",
+  "items": [
+    {
+      "type": "filesystem_metadata",
+      "id": "/users/public/dropper.bin",
+      "data": {"path": "/Users/Public/dropper.bin", "filename": "dropper.bin"}
+    },
+    {
+      "type": "filesystem_metadata",
+      "id": "/temp/stage2.dll",
+      "data": {"path": "/Temp/stage2.dll", "filename": "stage2.dll"}
+    },
+    {
+      "type": "registry_key",
+      "id": "hkcu/software/evil/run",
+      "data": {
+        "hive": "HKCU",
+        "key_path": "Software/Evil/Run",
+        "value_name": "Startup"
+      }
+    },
+    {
+      "type": "registry_key",
+      "id": "hklm/software/evil/service",
+      "data": {
+        "hive": "HKLM",
+        "key_path": "Software/Evil/Service",
+        "value_name": "Path"
+      }
+    },
+    {
+      "type": "browser_history",
+      "id": "http://phish.example/login",
+      "data": {"url": "http://phish.example/login"}
+    },
+    {
+      "type": "browser_history",
+      "id": "http://exfil.example/upload",
+      "data": {"url": "http://exfil.example/upload"}
+    },
+    {
+      "type": "event_log",
+      "id": "4624",
+      "data": {"event_id": "4624", "channel": "Security"}
+    },
+    {
+      "type": "event_log",
+      "id": "1102",
+      "data": {"event_id": "1102", "channel": "Security"}
+    },
+    {
+      "type": "running_process",
+      "id": "cmd.exe",
+      "data": {"name": "cmd.exe", "pid": 4012}
+    },
+    {
+      "type": "network_connection",
+      "id": "203.0.113.10:443",
+      "data": {"remote_address": "203.0.113.10", "remote_port": 443}
+    }
+  ]
+}

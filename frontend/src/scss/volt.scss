@@ -1,0 +1,36 @@
+// =========================================================
+// DFAT frontend styles — Volt React Dashboard (MIT) + DFAT layers
+// =========================================================
+
+@import url('https://fonts.googleapis.com/css?family=Nunito+Sans:300,400,600,700,800&display=swap');
+
+// Bootstrap mixins and functions
+@import "../../node_modules/bootstrap/scss/mixins";
+@import "../../node_modules/bootstrap/scss/functions";
+
+// Variables (canonical: src/styles/_variables.scss via volt shim)
+@import "volt/variables";
+
+// Bootstrap
+@import "../../node_modules/bootstrap/scss/bootstrap";
+
+// Vendor
+@import "volt/vendor";
+
+// volt mixins & functions
+@import "volt/mixins";
+@import "volt/functions";
+
+// Utilities
+@import "volt/reboot";
+@import "volt/utilities";
+
+// Layout
+@import "volt/layout";
+
+// Components
+@import "volt/components";
+
+// DFAT layers
+@import "../styles/overrides";
+@import "../styles/custom";

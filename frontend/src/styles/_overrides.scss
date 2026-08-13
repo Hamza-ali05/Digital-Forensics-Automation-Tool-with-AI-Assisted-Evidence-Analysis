@@ -1,0 +1,43 @@
+// DFAT theme overrides — Prompt 7.4 will refine forensic palette.
+// Import after Bootstrap/Volt component styles.
+
+body.theme-dark {
+  background-color: #1b1f2a;
+  color: #e9ecef;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Skeleton loaders (Bootstrap 5.0 beta lacks placeholder utilities) */
+@keyframes dfat-skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.dfat-skeleton-line {
+  display: block;
+  height: 0.85rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    #e9ecef 0%,
+    #f8f9fa 40%,
+    #e9ecef 80%
+  );
+  background-size: 200% 100%;
+  animation: dfat-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.dfat-skeleton-line-lg {
+  height: 1.25rem;
+}
+
+.dfat-toast-container .toast {
+  opacity: 1;
+}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -418,7 +418,7 @@ class PipelineOrchestrator:
         """Return stored benchmark results."""
         return list(self._benchmark_results)
 
-    def run_benchmark(
+    async def run_benchmark(
         self,
         evidence_id: str,
         ground_truth_path: Path,
@@ -441,16 +441,17 @@ class PipelineOrchestrator:
                 context={"evidence_id": evidence_id},
             )
         ground_truth = self._ground_truth_loader.load(ground_truth_path)
-        ground_truth["dataset_name"] = dataset_name or ground_truth.get(
-            "dataset_name",
-            dataset_name,
-        )
+        name = dataset_name or ground_truth.dataset_name or dataset_name
+        ground_truth.dataset_name = name
         end = datetime.now(UTC)
-        result = self._benchmark_comparator.compare(
-            artefact_set,
-            ground_truth,
-            end,
-            end,
+        # Use a one-second window when start/end are not tracked for ad-hoc runs.
+        start = end - timedelta(seconds=1)
+        result = await self._benchmark_comparator.compare(
+            recovered=artefact_set,
+            ground_truth=ground_truth,
+            pipeline_start=start,
+            pipeline_end=end,
+            dataset_name=name,
         )
         self._benchmark_results.append(result)
         return result

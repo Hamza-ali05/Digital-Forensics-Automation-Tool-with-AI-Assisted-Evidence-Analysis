@@ -32,7 +32,9 @@ from dfat.core.exceptions import (
     DFATError,
     EvaluationError,
     EvidenceNotFoundError,
+    GroundTruthNotFoundError,
     IntegrityVerificationError,
+    MetricsCalculationError,
     ParsingError,
     ReportingError,
     UnsupportedFormatError,
@@ -212,6 +214,20 @@ class GlobalExceptionHandler:
         @app.exception_handler(EvaluationError)
         async def _evaluation(request: Request, exc: EvaluationError) -> JSONResponse:
             return GlobalExceptionHandler._error_response(request, exc, 500)
+
+        @app.exception_handler(GroundTruthNotFoundError)
+        async def _ground_truth_missing(
+            request: Request,
+            exc: GroundTruthNotFoundError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 404)
+
+        @app.exception_handler(MetricsCalculationError)
+        async def _metrics(
+            request: Request,
+            exc: MetricsCalculationError,
+        ) -> JSONResponse:
+            return GlobalExceptionHandler._error_response(request, exc, 422)
 
         @app.exception_handler(InvalidCredentialsError)
         async def _invalid_credentials(

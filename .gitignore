@@ -27,17 +27,33 @@ secrets.json
 .mypy_cache/
 .pytest_cache/
 .pytest_tmp/
+.pytest_tmp*/
 .ruff_cache/
 .cache/
 .coverage
 .coverage.*
 coverage.xml
 htmlcov/
+coverage/
 .tox/
 .nox/
 .hypothesis/
 .dmypy.json
 dmypy.json
+
+# Frontend (CRA / npm) — also covered by frontend/.gitignore
+frontend/node_modules/
+frontend/build/
+frontend/coverage/
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.development.local
+frontend/.env.production
+frontend/.env.production.local
+frontend/.env.test
+frontend/.env.test.local
+!frontend/.env.example
 
 # IDE / OS
 .idea/

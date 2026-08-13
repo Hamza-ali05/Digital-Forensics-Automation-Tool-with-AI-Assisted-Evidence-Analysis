@@ -1,0 +1,65 @@
+{
+  "dataset_name": "dfrws_sample",
+  "source": "dfrws",
+  "description": "DFRWS-format 10-artefact ground truth fixture for Prompt 6 evaluation tests",
+  "artefacts": [
+    {
+      "category": "filesystem_metadata",
+      "identifier": "/windows/system32/evil.dll",
+      "expected_data": {"path": "/Windows/System32/evil.dll", "filename": "evil.dll"}
+    },
+    {
+      "category": "filesystem_metadata",
+      "identifier": "/windows/temp/payload.exe",
+      "expected_data": {"path": "/Windows/Temp/payload.exe", "filename": "payload.exe"}
+    },
+    {
+      "category": "registry_key",
+      "identifier": "hkcu/software/microsoft/windows/currentversion/run/malware",
+      "expected_data": {
+        "hive": "HKCU",
+        "key_path": "Software/Microsoft/Windows/CurrentVersion/Run",
+        "value_name": "Malware"
+      }
+    },
+    {
+      "category": "registry_key",
+      "identifier": "hklm/system/currentcontrolset/services/evilsvc",
+      "expected_data": {
+        "hive": "HKLM",
+        "key_path": "System/CurrentControlSet/Services/EvilSvc",
+        "value_name": "ImagePath"
+      }
+    },
+    {
+      "category": "browser_history",
+      "identifier": "http://malicious.example/payload",
+      "expected_data": {"url": "http://malicious.example/payload", "browser": "chrome"}
+    },
+    {
+      "category": "browser_history",
+      "identifier": "http://c2.example/beacon",
+      "expected_data": {"url": "http://c2.example/beacon", "browser": "firefox"}
+    },
+    {
+      "category": "event_log",
+      "identifier": "4688",
+      "expected_data": {"event_id": "4688", "channel": "Security"}
+    },
+    {
+      "category": "event_log",
+      "identifier": "7045",
+      "expected_data": {"event_id": "7045", "channel": "System"}
+    },
+    {
+      "category": "running_process",
+      "identifier": "mimikatz.exe",
+      "expected_data": {"name": "mimikatz.exe", "pid": 1337}
+    },
+    {
+      "category": "running_process",
+      "identifier": "powershell.exe",
+      "expected_data": {"name": "powershell.exe", "pid": 2204}
+    }
+  ]
+}

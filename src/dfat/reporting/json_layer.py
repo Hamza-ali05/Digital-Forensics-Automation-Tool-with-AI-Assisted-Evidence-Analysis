@@ -9,21 +9,31 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
-import jsonschema
-
-from dfat.core.enums import HashAlgorithm
+from dfat.ai_engine.llm.config import PROMPT_VERSION
+from dfat.core.enums import ArtefactCategory, HashAlgorithm, SuspicionLevel
 from dfat.core.exceptions import JSONSchemaValidationError
 from dfat.core.models.artefact import ArtefactSet, RankedArtefact
 from dfat.core.models.evidence import CaseMetadata
 from dfat.core.models.report import JSONReport
+from dfat.reporting.schema import ReportSchemaValidator
 from dfat.shared.constants import JSON_SCHEMA_VERSION
 from dfat.shared.hashing import compute_data_hash
 
-_TIMING_KEYS = ("acquisition_s", "parsing_s", "triage_s", "reporting_s")
+_TIMING_KEYS = (
+    "acquisition_seconds",
+    "parsing_seconds",
+    "triage_seconds",
+    "reporting_seconds",
+)
+
+_DEFAULT_AI_DISCLAIMER = (
+    "AI-generated investigative content is advisory. The structured JSON "
+    "artefact layer is the authoritative evidential record "
+    "(Scanlon et al., 2023)."
+)
 
 
 class StructuredJSONExporter:
@@ -31,19 +41,17 @@ class StructuredJSONExporter:
 
     def __init__(
         self,
-        schema_path: Path,
+        schema_validator: ReportSchemaValidator,
         hash_algorithm: HashAlgorithm = HashAlgorithm.SHA256,
     ) -> None:
         """Initialise the exporter.
 
         Args:
-            schema_path: Path to ``report_schema.json``.
+            schema_validator: Report schema validator (Prompt 6.1).
             hash_algorithm: Algorithm for artefact integrity hashing.
         """
-        self._schema_path = schema_path
+        self._validator = schema_validator
         self._hash_algorithm = hash_algorithm
-        with schema_path.open("r", encoding="utf-8") as handle:
-            self._schema: dict[str, Any] = json.load(handle)
 
     def export(
         self,
@@ -51,6 +59,8 @@ class StructuredJSONExporter:
         ranked_artefacts: list[RankedArtefact],
         case: CaseMetadata,
         stage_timings: dict[str, float],
+        ai_metadata: Optional[dict[str, Any]] = None,
+        evidence_hash: str = "",
     ) -> JSONReport:
         """Build, hash, validate, and return a structured JSON report.
 
@@ -59,6 +69,8 @@ class StructuredJSONExporter:
             ranked_artefacts: Triaged artefacts for the evidential array.
             case: Case metadata for the report envelope.
             stage_timings: Pipeline stage timings in seconds.
+            ai_metadata: Optional AI analysis metadata block.
+            evidence_hash: Hash of the input evidence image/file.
 
         Returns:
             Validated ``JSONReport`` domain model.
@@ -67,11 +79,12 @@ class StructuredJSONExporter:
             JSONSchemaValidationError: If schema validation fails.
         """
         artefact_data = self._serialise_artefacts(ranked_artefacts)
-        integrity_hash = self._hash_artefact_data(artefact_data)
+        integrity_hash = self._compute_integrity_hash(artefact_data)
         report_id = str(uuid4())
         generated_at = datetime.now(UTC)
         timings = self._normalise_timings(stage_timings)
         summary_statistics = self._compute_summary_statistics(ranked_artefacts)
+        ai_block = self._normalise_ai_metadata(ai_metadata)
 
         document: dict[str, Any] = {
             "schema_version": JSON_SCHEMA_VERSION,
@@ -87,6 +100,13 @@ class StructuredJSONExporter:
             "pipeline_stage_timings": timings,
             "artefacts": artefact_data,
             "summary_statistics": summary_statistics,
+            "ai_metadata": ai_block,
+            "reproducibility": {
+                "artefact_data_hash": integrity_hash,
+                "input_evidence_hash": evidence_hash or "",
+                "tool_version": self._tool_version(),
+                "schema_version": JSON_SCHEMA_VERSION,
+            },
         }
         self.validate_against_schema(document)
 
@@ -111,16 +131,11 @@ class StructuredJSONExporter:
         Raises:
             JSONSchemaValidationError: When validation fails.
         """
-        validator = jsonschema.Draft7Validator(
-            self._schema,
-            format_checker=jsonschema.FormatChecker(),
-        )
-        errors = sorted(validator.iter_errors(json_data), key=lambda err: list(err.path))
-        if errors:
-            messages = [f"{'/'.join(str(p) for p in err.path)}: {err.message}" for err in errors]
+        result = self._validator.validate(json_data)
+        if not result.is_valid:
             raise JSONSchemaValidationError(
                 "JSON report failed schema validation",
-                validation_errors=messages,
+                validation_errors=list(result.errors),
             )
         return True
 
@@ -134,10 +149,10 @@ class StructuredJSONExporter:
             ranked: Ranked artefacts.
 
         Returns:
-            Summary statistics mapping.
+            Summary statistics mapping with zeros for all enum members.
         """
-        by_category: dict[str, int] = {}
-        by_suspicion: dict[str, int] = {}
+        by_category = {category.value: 0 for category in ArtefactCategory}
+        by_suspicion = {level.value: 0 for level in SuspicionLevel}
         for artefact in ranked:
             by_category[artefact.category.value] = (
                 by_category.get(artefact.category.value, 0) + 1
@@ -147,8 +162,8 @@ class StructuredJSONExporter:
             )
         return {
             "total_artefacts": len(ranked),
-            "by_category": dict(sorted(by_category.items())),
-            "by_suspicion_level": dict(sorted(by_suspicion.items())),
+            "by_category": by_category,
+            "by_suspicion_level": by_suspicion,
         }
 
     def _serialise_artefacts(
@@ -174,19 +189,32 @@ class StructuredJSONExporter:
                     "relevance_score": artefact.relevance_score,
                     "raw_data": artefact.raw_data,
                     "classification_reasoning": artefact.classification_reasoning,
+                    "metadata": dict(artefact.metadata),
                 }
             )
-        rows.sort(key=lambda row: row["artefact_id"])
-        return rows
+        return self._sort_artefacts_deterministically(rows)
 
-    def _hash_artefact_data(self, artefact_data: list[dict[str, Any]]) -> str:
-        """Compute SHA-256 over canonical JSON of the artefact array.
+    @staticmethod
+    def _sort_artefacts_deterministically(
+        artefacts: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Sort artefact dicts by ``(category, artefact_id)``."""
+        return sorted(
+            artefacts,
+            key=lambda row: (
+                str(row.get("category", "")),
+                str(row.get("artefact_id", "")),
+            ),
+        )
+
+    def _compute_integrity_hash(self, artefact_data: list[dict[str, Any]]) -> str:
+        """Compute SHA-256 over canonical JSON of the artefact array only.
 
         Args:
             artefact_data: Deterministically ordered artefact dictionaries.
 
         Returns:
-            Hexadecimal integrity digest.
+            Hexadecimal integrity digest (never includes report metadata).
         """
         canonical = json.dumps(
             artefact_data,
@@ -199,7 +227,7 @@ class StructuredJSONExporter:
 
     @staticmethod
     def _normalise_timings(stage_timings: dict[str, float]) -> dict[str, float]:
-        """Ensure required timing keys are present.
+        """Ensure required timing keys are present (``*_seconds`` names).
 
         Args:
             stage_timings: Caller-provided timings.
@@ -208,11 +236,19 @@ class StructuredJSONExporter:
             Timing map with required keys defaulting to 0.0.
         """
         aliases = {
-            "acquisition": "acquisition_s",
-            "parsing": "parsing_s",
-            "triage": "triage_s",
-            "ai_triage": "triage_s",
-            "reporting": "reporting_s",
+            "acquisition": "acquisition_seconds",
+            "acquisition_s": "acquisition_seconds",
+            "acquisition_seconds": "acquisition_seconds",
+            "parsing": "parsing_seconds",
+            "parsing_s": "parsing_seconds",
+            "parsing_seconds": "parsing_seconds",
+            "triage": "triage_seconds",
+            "triage_s": "triage_seconds",
+            "ai_triage": "triage_seconds",
+            "triage_seconds": "triage_seconds",
+            "reporting": "reporting_seconds",
+            "reporting_s": "reporting_seconds",
+            "reporting_seconds": "reporting_seconds",
         }
         normalised = {key: 0.0 for key in _TIMING_KEYS}
         for key, value in stage_timings.items():
@@ -220,3 +256,33 @@ class StructuredJSONExporter:
             if target in normalised:
                 normalised[target] = float(value)
         return normalised
+
+    @staticmethod
+    def _normalise_ai_metadata(
+        ai_metadata: Optional[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return a complete ``ai_metadata`` block with safe defaults."""
+        defaults: dict[str, Any] = {
+            "model_used": "none",
+            "prompt_version": PROMPT_VERSION,
+            "confidence_score": 0.0,
+            "analysis_mode": "rule_based",
+            "disclaimer": _DEFAULT_AI_DISCLAIMER,
+        }
+        if not ai_metadata:
+            return defaults
+        merged = dict(defaults)
+        for key in defaults:
+            if key in ai_metadata and ai_metadata[key] is not None:
+                merged[key] = ai_metadata[key]
+        return merged
+
+    @staticmethod
+    def _tool_version() -> str:
+        """Return the DFAT package version for reproducibility metadata."""
+        try:
+            from dfat import __version__
+
+            return str(__version__)
+        except Exception:  # noqa: BLE001
+            return "0.0.0"

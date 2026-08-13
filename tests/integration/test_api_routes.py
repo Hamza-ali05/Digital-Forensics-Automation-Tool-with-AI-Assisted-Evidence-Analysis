@@ -258,11 +258,11 @@ def test_evaluation_benchmark_and_results_list(app_client: TestClient) -> None:
         false_positives=0,
         false_negatives=0,
     )
-    orchestrator = MagicMock()
-    orchestrator.run_benchmark.return_value = result
-    orchestrator.list_benchmark_results.return_value = [result]
+    evaluation_service = AsyncMock()
+    evaluation_service.run_benchmark_for_dataset = AsyncMock(return_value=result)
+    evaluation_service.get_benchmark_results = AsyncMock(return_value=[result])
     container = app_client.app.state.container
-    container.pipeline.pipeline_orchestrator.override(orchestrator)
+    container.services.evaluation_service.override(evaluation_service)
 
     try:
         # Act
@@ -271,12 +271,12 @@ def test_evaluation_benchmark_and_results_list(app_client: TestClient) -> None:
             headers=_admin_auth(app_client),
             json={
                 "evidence_id": "ev-1",
-                "ground_truth_path": "/tmp/gt.json",
-                "dataset_name": "sample",
+                "ground_truth_dataset": "sample",
+                "dataset_source": "dfrws",
             },
         )
         listed = app_client.get(
-            "/api/v1/evaluation/results",
+            "/api/v1/evaluation/benchmark/results",
             headers=_auth(app_client),
         )
 
@@ -286,7 +286,105 @@ def test_evaluation_benchmark_and_results_list(app_client: TestClient) -> None:
         assert listed.status_code == 200
         assert len(listed.json()) == 1
     finally:
-        container.pipeline.pipeline_orchestrator.reset_override()
+        container.services.evaluation_service.reset_override()
+
+
+def test_report_verify_and_pdf_export(app_client: TestClient, tmp_path: Path) -> None:
+    """Verify integrity verification and PDF download endpoints."""
+    report = ForensicReport(
+        report_id="rep-1",
+        case=CaseMetadata(case_id="c1", case_name="Case", investigator="Inv"),
+        json_report=JSONReport(
+            report_id="json-1",
+            evidence_id="ev-1",
+            artefact_data=[{"artefact_id": "a1", "category": "event_log", "raw_data": {}}],
+            integrity_hash="d" * 64,
+        ),
+        narrative_report=NarrativeReport(
+            report_id="narr-1",
+            evidence_id="ev-1",
+            summary_text="Narrative body",
+            llm_model_used="Mock",
+            generation_parameters={},
+        ),
+        pipeline_duration_seconds=1.5,
+        stage_timings={},
+    )
+    pdf_path = tmp_path / "report.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 mock")
+    from dfat.reporting.integrity import IntegrityVerificationResult
+
+    service = AsyncMock()
+    service.get_report = AsyncMock(return_value=report)
+    service.verify_integrity = AsyncMock(
+        return_value=IntegrityVerificationResult(
+            is_valid=True,
+            integrity_hash_match=True,
+            schema_version_valid=True,
+            report_id_valid=True,
+            issues=[],
+        )
+    )
+    service.export_pdf = AsyncMock(return_value=pdf_path)
+    container = app_client.app.state.container
+    container.services.report_service.override(service)
+
+    try:
+        verified = app_client.post(
+            "/api/v1/reports/rep-1/verify",
+            headers=_auth(app_client),
+        )
+        pdf = app_client.get(
+            "/api/v1/reports/rep-1/export/pdf",
+            headers=_auth(app_client),
+        )
+        assert verified.status_code == 200
+        assert verified.json()["is_valid"] is True
+        assert pdf.status_code == 200
+        assert pdf.content.startswith(b"%PDF")
+    finally:
+        container.services.report_service.reset_override()
+
+
+def test_usability_respond_anonymous_and_results_require_auth(
+    app_client: TestClient,
+) -> None:
+    """Verify anonymous usability submit; analysis requires auth."""
+    evaluation_service = AsyncMock()
+    evaluation_service.collect_usability_response = AsyncMock(
+        return_value="11111111-1111-1111-1111-111111111111"
+    )
+    evaluation_service.get_usability_analysis = AsyncMock(
+        return_value={"total_responses": 1, "usefulness_percentage": 100.0}
+    )
+    evaluation_service.get_questionnaire_instrument = MagicMock(
+        return_value={"instrument_version": "1.0.0", "questions": []}
+    )
+    container = app_client.app.state.container
+    container.services.evaluation_service.override(evaluation_service)
+
+    try:
+        unauth_results = app_client.get("/api/v1/evaluation/usability/results")
+        assert unauth_results.status_code in {401, 403}
+
+        submitted = app_client.post(
+            "/api/v1/evaluation/usability/respond",
+            json={"ratings": {"usefulness": 5, "accuracy": 4, "clarity": 5}},
+        )
+        assert submitted.status_code == 201
+        assert submitted.json()["participant_id"]
+
+        questionnaire = app_client.get("/api/v1/evaluation/usability/questionnaire")
+        assert questionnaire.status_code == 200
+
+        results = app_client.get(
+            "/api/v1/evaluation/usability/results",
+            headers=_admin_auth(app_client),
+        )
+        assert results.status_code == 200
+        assert results.json()["total_responses"] == 1
+    finally:
+        container.services.evaluation_service.reset_override()
 
 
 def test_analysis_rejects_invalid_mode(app_client: TestClient) -> None:

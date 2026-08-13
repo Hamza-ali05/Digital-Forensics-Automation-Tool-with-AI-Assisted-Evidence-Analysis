@@ -238,6 +238,11 @@ def report_orm_to_domain(orm: ReportRecordORM) -> ForensicReport:
         narrative_report=narrative,
         pipeline_duration_seconds=orm.pipeline_duration_seconds,
         stage_timings=_loads(orm.stage_timings, default={}),
+        audit_metadata=(
+            envelope.get("audit_metadata", {})
+            if isinstance(envelope, dict)
+            else {}
+        ),
     )
 
 
@@ -257,6 +262,7 @@ def report_domain_to_orm(domain: ForensicReport) -> ReportRecordORM:
             "report_id": domain.narrative_report.report_id,
             "generated_at": domain.narrative_report.generated_at.isoformat(),
         },
+        "audit_metadata": dict(domain.audit_metadata or {}),
     }
     return ReportRecordORM(
         id=domain.report_id,
@@ -342,6 +348,9 @@ def usability_orm_to_domain(orm: UsabilityRecordORM) -> UsabilityResponse:
         usefulness_rating=orm.usefulness_rating,
         accuracy_rating=orm.accuracy_rating,
         clarity_rating=orm.clarity_rating,
+        q1_rating=orm.q1_rating,
+        q4_rating=orm.q4_rating,
+        comparative_rating=orm.comparative_rating,
         free_text_feedback=orm.free_text_feedback,
         submitted_at=orm.submitted_at,
     )
@@ -362,6 +371,9 @@ def usability_domain_to_orm(domain: UsabilityResponse) -> UsabilityRecordORM:
         usefulness_rating=domain.usefulness_rating,
         accuracy_rating=domain.accuracy_rating,
         clarity_rating=domain.clarity_rating,
+        q1_rating=domain.q1_rating,
+        q4_rating=domain.q4_rating,
+        comparative_rating=domain.comparative_rating,
         free_text_feedback=domain.free_text_feedback,
         submitted_at=domain.submitted_at,
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -100,3 +100,24 @@ class SQLAlchemyUsabilityRepository(
     async def count_responses(self) -> int:
         """Return the number of stored usability responses."""
         return await self.count()
+
+    async def delete_all_responses(self) -> int:
+        """Delete all usability responses (ethics data destruction).
+
+        Returns:
+            Number of rows deleted.
+
+        Raises:
+            DatabaseError: If the delete fails.
+        """
+        async with self._session_factory() as session:
+            try:
+                result = await session.execute(delete(UsabilityRecordORM))
+                await session.commit()
+                return int(result.rowcount or 0)
+            except SQLAlchemyError as exc:
+                await session.rollback()
+                raise DatabaseError(
+                    "Failed to delete usability responses",
+                    context={"error": str(exc)},
+                ) from exc

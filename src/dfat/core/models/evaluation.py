@@ -51,9 +51,12 @@ class UsabilityResponse(BaseModel):
     Attributes:
         response_id: Unique response identifier.
         participant_id: Anonymised participant identifier.
-        usefulness_rating: Usefulness rating on a 1–5 scale.
-        accuracy_rating: Accuracy rating on a 1–5 scale.
-        clarity_rating: Clarity rating on a 1–5 scale.
+        usefulness_rating: Aggregated usefulness rating (typically mean of Q1+Q4).
+        accuracy_rating: Accuracy rating on a 1–5 scale (Q2).
+        clarity_rating: Clarity rating on a 1–5 scale (Q3).
+        q1_rating: Optional raw Q1 usefulness Likert score.
+        q4_rating: Optional raw Q4 usefulness Likert score.
+        comparative_rating: Optional Q5 comparative Likert score.
         free_text_feedback: Optional free-text comments.
         submitted_at: UTC submission timestamp.
     """
@@ -69,5 +72,8 @@ class UsabilityResponse(BaseModel):
     usefulness_rating: int = Field(ge=1, le=5)
     accuracy_rating: int = Field(ge=1, le=5)
     clarity_rating: int = Field(ge=1, le=5)
+    q1_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    q4_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    comparative_rating: Optional[int] = Field(default=None, ge=1, le=5)
     free_text_feedback: Optional[str] = None
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

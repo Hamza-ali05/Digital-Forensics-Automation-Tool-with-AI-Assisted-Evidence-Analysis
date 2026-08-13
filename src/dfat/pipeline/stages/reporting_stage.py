@@ -115,11 +115,25 @@ class ReportingStage(IPipelineStage):
             report = self._report_builder.build_complete_report(
                 case=case,
                 artefact_set=context.artefact_set,
-                ranked_artefacts=list(context.ranked_artefacts),
-                summary_text=context.summary_text,
+                ranked=list(context.ranked_artefacts),
+                summary_result=context.summary_text,
                 llm_model=llm_model,
                 generation_params=generation_params,
                 stage_timings=timings,
+                confidence=float(context.metadata.get("confidence_score") or 0.0),
+                evidence_hash=str(
+                    context.metadata.get("evidence_hash")
+                    or (
+                        context.evidence.original_hash
+                        if context.evidence is not None
+                        else ""
+                    )
+                ),
+                pipeline_job_id=job.job_id,
+                user_id=job.user_id,
+                custody_chain_length=int(
+                    context.metadata.get("custody_chain_length") or 0
+                ),
             )
 
             duration = time.perf_counter() - started

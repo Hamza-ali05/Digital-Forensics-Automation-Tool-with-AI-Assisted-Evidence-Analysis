@@ -116,6 +116,26 @@ def get_evaluation_service(request: Request) -> EvaluationService:
     return _container(request).services.evaluation_service()
 
 
+def get_response_collector(request: Request):
+    """Resolve the anonymised usability response collector."""
+    return _container(request).evaluation_engine.response_collector()
+
+
+def get_performance_analyzer(request: Request):
+    """Resolve the benchmark performance analyzer."""
+    return _container(request).evaluation_engine.performance_analyzer()
+
+
+def get_integrity_verifier(request: Request):
+    """Resolve the report integrity verifier."""
+    return _container(request).reporting_engine.integrity_verifier()
+
+
+def get_reproducibility_verifier(request: Request):
+    """Resolve the report reproducibility verifier."""
+    return _container(request).reporting_engine.reproducibility_verifier()
+
+
 def get_case_service(request: Request) -> CaseService:
     """Resolve the case lifecycle management service."""
     return _container(request).services.case_service()
@@ -192,15 +212,19 @@ __all__ = [
     "get_evidence_service",
     "get_fallback_analyzer",
     "get_forensic_orchestrator",
+    "get_integrity_verifier",
     "get_jwt_handler",
     "get_llm_client",
     "get_llm_connection_manager",
     "get_memory_dump_handler",
     "get_optional_user",
+    "get_performance_analyzer",
     "get_qa_assistant",
     "get_report_builder",
     "get_report_repository",
     "get_report_service",
+    "get_reproducibility_verifier",
+    "get_response_collector",
     "get_session_repo",
     "get_user_repo",
     "get_user_service",

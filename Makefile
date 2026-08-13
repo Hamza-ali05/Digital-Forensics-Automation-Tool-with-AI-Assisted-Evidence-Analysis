@@ -1,4 +1,4 @@
-.PHONY: install install-dev install-forensic test test-unit test-integration test-all test-cov lint format type-check clean run-api run-pipeline db-init db-migrate db-upgrade db-downgrade db-current db-history test-auth test-database test-services test-middleware test-backend test-integration-auth test-cases test-evidence-mgmt test-prompt3 test-parsers test-pipeline test-processing test-prompt4 test-ai test-prompt5 all
+.PHONY: install install-dev install-forensic test test-unit test-integration test-all test-cov lint format type-check clean run-api run-pipeline db-init db-migrate db-upgrade db-downgrade db-current db-history test-auth test-database test-services test-middleware test-backend test-integration-auth test-cases test-evidence-mgmt test-prompt3 test-parsers test-pipeline test-processing test-prompt4 test-ai test-prompt5 test-reporting test-evaluation test-prompt6 frontend-install frontend-start frontend-build frontend-test frontend-lint all
 
 ALEMBIC := alembic -c src/dfat/database/migrations/alembic.ini
 export PYTHONPATH := src$(if $(PYTHONPATH),:$(PYTHONPATH),)
@@ -71,6 +71,30 @@ test-ai:
 
 test-prompt5:
 	pytest tests/unit/ai_engine/ tests/integration/test_ai_routes.py tests/integration/test_ai_pipeline.py -v --cov=dfat.ai_engine --cov-report=term-missing
+
+test-reporting:
+	pytest tests/unit/reporting/ tests/integration/test_reporting_pipeline.py -v --cov=dfat.reporting --cov-report=term-missing
+
+test-evaluation:
+	pytest tests/unit/evaluation/ tests/integration/test_evaluation_api.py -v --cov=dfat.evaluation --cov-report=term-missing
+
+test-prompt6:
+	pytest tests/unit/reporting/ tests/unit/evaluation/ tests/integration/test_reporting_pipeline.py tests/integration/test_evaluation_api.py -v --cov=dfat.reporting --cov=dfat.evaluation --cov-report=term-missing
+
+frontend-install:
+	cd frontend && npm install --legacy-peer-deps
+
+frontend-start:
+	cd frontend && npm start
+
+frontend-build:
+	cd frontend && npm run build
+
+frontend-test:
+	cd frontend && npm test -- --watchAll=false
+
+frontend-lint:
+	cd frontend && npx eslint src/ --ext .js,.jsx
 
 lint:
 	ruff check src tests

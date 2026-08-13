@@ -73,6 +73,7 @@ class ForensicReport(BaseModel):
         narrative_report: Human-readable narrative component.
         pipeline_duration_seconds: End-to-end pipeline duration.
         stage_timings: Per-stage duration map in seconds.
+        audit_metadata: Generation audit metadata embedded at report time.
     """
 
     model_config = ConfigDict(
@@ -87,3 +88,4 @@ class ForensicReport(BaseModel):
     narrative_report: NarrativeReport
     pipeline_duration_seconds: float
     stage_timings: dict[str, float] = Field(default_factory=dict)
+    audit_metadata: dict[str, Any] = Field(default_factory=dict)

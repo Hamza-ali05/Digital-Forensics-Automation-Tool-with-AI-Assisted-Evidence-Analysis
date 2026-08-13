@@ -49,6 +49,9 @@ auth = [
     "argon2-cffi>=23.1",
     "email-validator>=2.0",
 ]
+reporting = [
+    "reportlab>=4.0",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
@@ -94,6 +97,10 @@ module = [
     "Evtx.*",
     "volatility3",
     "volatility3.*",
+    "reportlab",
+    "reportlab.*",
+    "weasyprint",
+    "weasyprint.*",
 ]
 ignore_missing_imports = true
 

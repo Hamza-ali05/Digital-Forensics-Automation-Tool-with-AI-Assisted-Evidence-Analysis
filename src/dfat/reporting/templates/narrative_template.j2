@@ -1,9 +1,14 @@
 {# DFAT Narrative Report Template — supplementary investigative aid #}
+{# Structured JSON remains the primary evidential record (Scanlon et al., 2023). #}
 # Investigative Summary — {{ case_name }}
 
+**Case ID:** {{ case_id }}
 **Generated:** {{ generated_at }}
 **Evidence ID:** {{ evidence_id }}
 **Report ID:** {{ report_id }}
+**Investigator:** {{ investigator }}
+**Model:** {{ llm_model }}
+**Confidence:** {{ '%.0f'|format(confidence * 100) }}%
 
 ---
 
@@ -19,13 +24,19 @@
 
 ---
 
+## Key Findings
+
+{{ key_findings }}
+
+---
+
 ## Detailed Findings by Category
 
 {% for category, items in findings_by_category.items() %}
 ### {{ category }}
 
 {% for item in items %}
-- **[{{ item.suspicion_level }} | {{ '%.2f'|format(item.relevance_score) }}]** {{ item.source_path or item.artefact_id }}
+- **[{{ item.suspicion_level.value }} | {{ '%.2f'|format(item.relevance_score) }}]** {{ item.source_path or item.artefact_id }}
   {% if item.classification_reasoning %}_{{ item.classification_reasoning }}_{% endif %}
 {% endfor %}
 
@@ -35,9 +46,11 @@ _No ranked findings available._
 
 ---
 
-## Timeline
+## Timeline of Events
 
-{% if timeline %}
+{% if timeline is string %}
+{{ timeline }}
+{% elif timeline %}
 {% for event in timeline %}
 - {{ event }}
 {% endfor %}
@@ -47,9 +60,51 @@ _Insufficient temporal data to construct a reliable timeline._
 
 ---
 
+## Indicators of Compromise
+
+{% if iocs %}
+| # | Indicator |
+|---|-----------|
+{% for ioc in iocs %}
+| {{ loop.index }} | {{ ioc }} |
+{% endfor %}
+{% else %}
+_No indicators of compromise were identified in the summary._
+{% endif %}
+
+---
+
+## Recommended Actions
+
+{% if actions %}
+{% for action in actions %}
+{{ loop.index }}. {{ action }}
+{% endfor %}
+{% else %}
+_No recommended actions were produced by the model._
+{% endif %}
+
+---
+
 ## Statistics Appendix
 
 {{ statistics_appendix }}
+
+### Counts by category
+
+| Category | Count |
+|----------|------:|
+{% for name, count in statistics.by_category.items() | sort %}
+| {{ name }} | {{ count }} |
+{% endfor %}
+
+### Counts by suspicion level
+
+| Suspicion level | Count |
+|-----------------|------:|
+{% for name, count in statistics.by_suspicion_level.items() | sort %}
+| {{ name }} | {{ count }} |
+{% endfor %}
 
 ---
 
@@ -57,9 +112,16 @@ _Insufficient temporal data to construct a reliable timeline._
 
 | Field | Value |
 |-------|-------|
+| Case ID | {{ case_id }} |
+| Case name | {{ case_name }} |
+| Evidence ID | {{ evidence_id }} |
+| Report ID | {{ report_id }} |
+| Investigator | {{ investigator }} |
 | LLM model | {{ llm_model }} |
+| Prompt version | {{ prompt_version }} |
+| Confidence | {{ '%.0f'|format(confidence * 100) }}% |
 | Generation parameters | {{ generation_params }} |
 | Generation time (UTC) | {{ generated_at }} |
 | Artefact count | {{ artefact_count }} |
 
-*Structured JSON remains the authoritative evidential record. This narrative is advisory only.*
+*Structured JSON remains the authoritative evidential record. This narrative is advisory only (Scanlon et al., 2023).*

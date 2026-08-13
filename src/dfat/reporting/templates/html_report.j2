@@ -1,0 +1,318 @@
+{# DFAT self-contained HTML forensic report — all CSS/JS inline #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DFAT Report — {{ case_name }}</title>
+  <style>
+    :root {
+      --ink: #1b2430;
+      --muted: #5c6b7a;
+      --line: #d7dde5;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --accent: #1a237e;
+      --critical: #b71c1c;
+      --high: #e65100;
+      --medium: #f9a825;
+      --low: #1565c0;
+      --info: #546e7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    header.report-header {
+      background: linear-gradient(135deg, #0f1b3d 0%, #1a237e 55%, #283593 100%);
+      color: #fff;
+      padding: 2rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    header.report-header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.75rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }
+    header.report-header p {
+      margin: 0.15rem 0;
+      opacity: 0.92;
+      font-size: 0.95rem;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1.1rem;
+    }
+    h2 {
+      margin: 0 0 0.85rem;
+      font-size: 1.15rem;
+      color: var(--accent);
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 0.4rem;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem 1.25rem;
+    }
+    .meta-item dt {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 0;
+    }
+    .meta-item dd {
+      margin: 0.15rem 0 0;
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .prose { white-space: pre-wrap; }
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    table.data th, table.data td {
+      border: 1px solid var(--line);
+      padding: 0.45rem 0.55rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.data th {
+      background: #eceff7;
+      color: var(--accent);
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+    }
+    table.data th:hover { background: #dfe3f1; }
+    table.data th::after { content: " ↕"; opacity: 0.45; font-size: 0.75em; }
+    .row-critical { background: #ffebee; }
+    .row-high { background: #fff3e0; }
+    .row-medium { background: #fffde7; }
+    .row-low { background: #e3f2fd; }
+    .row-informational { background: #eceff1; }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-critical { background: var(--critical); }
+    .badge-high { background: var(--high); }
+    .badge-medium { background: var(--medium); color: #212121; }
+    .badge-low { background: var(--low); }
+    .badge-informational { background: var(--info); }
+    details.json-viewer {
+      border: 1px dashed var(--line);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      background: #fafbfd;
+    }
+    details.json-viewer summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    pre.json {
+      overflow: auto;
+      max-height: 28rem;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 0.85rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
+    .disclaimer {
+      border-left: 4px solid var(--critical);
+      background: #fff8f8;
+      padding: 0.85rem 1rem;
+      white-space: pre-wrap;
+    }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 1rem 0 2rem;
+    }
+    @media (max-width: 700px) {
+      .wrap { padding: 0.85rem; }
+      header.report-header { padding: 1.25rem 1rem; }
+      table.data { font-size: 0.8rem; }
+    }
+    @media print {
+      body { background: #fff; }
+      header.report-header {
+        background: #1a237e !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      section { break-inside: avoid; box-shadow: none; }
+      details.json-viewer[open] pre.json { max-height: none; }
+      table.data th { cursor: default; }
+      table.data th::after { content: ""; }
+    }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <div class="wrap">
+      <h1>DFAT Forensic Report</h1>
+      <p>{{ case_name }}</p>
+      <p>Report ID: {{ report_id }} · Evidence: {{ evidence_id }} · DFAT {{ tool_version }}</p>
+      <p>Generated: {{ generated_at }}</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="case-info">
+      <h2>Case Information</h2>
+      <dl class="meta-grid">
+        <div class="meta-item"><dt>Case name</dt><dd>{{ case_name }}</dd></div>
+        <div class="meta-item"><dt>Case ID</dt><dd>{{ case_id }}</dd></div>
+        <div class="meta-item"><dt>Status</dt><dd>{{ case_status }}</dd></div>
+        <div class="meta-item"><dt>Investigator</dt><dd>{{ investigator }}</dd></div>
+        <div class="meta-item"><dt>Lead investigator</dt><dd>{{ lead_investigator }}</dd></div>
+        <div class="meta-item"><dt>Evidence count</dt><dd>{{ evidence_count }}</dd></div>
+        <div class="meta-item"><dt>Integrity hash</dt><dd>{{ integrity_hash }}</dd></div>
+        <div class="meta-item"><dt>Schema version</dt><dd>{{ schema_version }}</dd></div>
+      </dl>
+      {% if case_tags %}
+      <p><strong>Tags:</strong> {{ case_tags | join(", ") }}</p>
+      {% endif %}
+    </section>
+
+    <section id="executive-summary">
+      <h2>Executive Summary</h2>
+      <div class="prose">{{ executive_summary }}</div>
+    </section>
+
+    <section id="findings">
+      <h2>Findings</h2>
+      <p class="muted">Click column headers to sort. Rows are colour-coded by suspicion level.</p>
+      {{ artefact_table_html | safe }}
+    </section>
+
+    <section id="timeline">
+      <h2>Timeline</h2>
+      {% if timeline_items %}
+      <ul>
+        {% for item in timeline_items %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p>Insufficient temporal data for a timeline.</p>
+      {% endif %}
+    </section>
+
+    <section id="iocs">
+      <h2>Indicators of Compromise</h2>
+      {% if iocs %}
+      <table class="data" id="ioc-table">
+        <thead><tr><th>#</th><th>Indicator</th></tr></thead>
+        <tbody>
+          {% for ioc in iocs %}
+          <tr><td>{{ loop.index }}</td><td>{{ ioc }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No indicators of compromise recorded.</p>
+      {% endif %}
+    </section>
+
+    <section id="statistics">
+      <h2>Statistics</h2>
+      {{ statistics_html | safe }}
+    </section>
+
+    <section id="custody">
+      <h2>Chain-of-Custody Summary</h2>
+      <dl class="meta-grid">
+        <div class="meta-item"><dt>Custody chain entries</dt><dd>{{ custody_entries }}</dd></div>
+        <div class="meta-item"><dt>Generated by user</dt><dd>{{ audit_user }}</dd></div>
+        <div class="meta-item"><dt>Pipeline job</dt><dd>{{ pipeline_job_id }}</dd></div>
+        <div class="meta-item"><dt>Generation host</dt><dd>{{ generation_host }}</dd></div>
+        <div class="meta-item"><dt>Linked evidence IDs</dt><dd>{{ linked_evidence }}</dd></div>
+      </dl>
+    </section>
+
+    <section id="disclaimer">
+      <h2>LLM Disclaimer</h2>
+      <div class="disclaimer">{{ disclaimer }}</div>
+    </section>
+
+    <section id="json-data">
+      <h2>JSON Data Viewer</h2>
+      <details class="json-viewer">
+        <summary>Show structured JSON artefact payload (collapsible)</summary>
+        <pre class="json">{{ json_payload }}</pre>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    Structured JSON remains the primary evidential record (Scanlon et al., 2023).
+    This HTML narrative is advisory only.
+  </footer>
+
+  <script>
+    (function () {
+      function sortTable(table, col, numeric) {
+        var tbody = table.tBodies[0];
+        if (!tbody) return;
+        var rows = Array.prototype.slice.call(tbody.rows);
+        var asc = table.getAttribute("data-sort-col") == String(col)
+          && table.getAttribute("data-sort-dir") === "asc" ? false : true;
+        rows.sort(function (a, b) {
+          var av = (a.cells[col] && a.cells[col].getAttribute("data-sort")) ||
+                   (a.cells[col] && a.cells[col].textContent) || "";
+          var bv = (b.cells[col] && b.cells[col].getAttribute("data-sort")) ||
+                   (b.cells[col] && b.cells[col].textContent) || "";
+          if (numeric) {
+            av = parseFloat(av) || 0;
+            bv = parseFloat(bv) || 0;
+            return asc ? av - bv : bv - av;
+          }
+          av = String(av).toLowerCase();
+          bv = String(bv).toLowerCase();
+          if (av < bv) return asc ? -1 : 1;
+          if (av > bv) return asc ? 1 : -1;
+          return 0;
+        });
+        rows.forEach(function (row) { tbody.appendChild(row); });
+        table.setAttribute("data-sort-col", String(col));
+        table.setAttribute("data-sort-dir", asc ? "asc" : "desc");
+      }
+      document.querySelectorAll("table.data").forEach(function (table) {
+        var headers = table.tHead ? table.tHead.rows[0].cells : [];
+        Array.prototype.forEach.call(headers, function (th, idx) {
+          th.addEventListener("click", function () {
+            var numeric = th.getAttribute("data-numeric") === "1";
+            sortTable(table, idx, numeric);
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

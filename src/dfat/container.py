@@ -38,6 +38,7 @@ from dfat.ai_engine.triage.summarizer import InvestigativeSummarizer
 from dfat.ai_engine.validation.response_validator import AIResponseValidator
 from dfat.core.enums import HashAlgorithm
 from dfat.core.interfaces.parser import IArtefactParser
+from dfat.core.interfaces.reporter import IReportGenerator
 from dfat.forensic_engine.acquisition.image_handler import DiskImageHandler
 from dfat.forensic_engine.acquisition.integrity import IntegrityChecker
 from dfat.forensic_engine.acquisition.memory_handler import MemoryDumpHandler
@@ -59,11 +60,16 @@ from dfat.evidence_management.hash_service import MultiHashService
 from dfat.evidence_management.metadata_service import EvidenceMetadataService
 from dfat.evidence_management.mime_identifier import MIMEIdentifier
 from dfat.evidence_management.validation_service import EvidenceValidationService
+from dfat.evaluation.benchmark.cfreds_handler import CFReDSHandler
 from dfat.evaluation.benchmark.comparator import BenchmarkComparator
+from dfat.evaluation.benchmark.dfrws_handler import DFRWSHandler
 from dfat.evaluation.benchmark.ground_truth import GroundTruthLoader
 from dfat.evaluation.benchmark.metrics import MetricsCalculator
+from dfat.evaluation.benchmark.performance import PerformanceAnalyzer
+from dfat.evaluation.benchmark.visualisation import MetricsVisualiser
 from dfat.evaluation.usability.questionnaire import QuestionnaireInstrument
 from dfat.evaluation.usability.response_analyzer import ResponseAnalyzer
+from dfat.evaluation.usability.response_collector import ResponseCollector
 from dfat.infrastructure.cache.artefact_cache import InMemoryArtefactCache
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger, setup_logging
 from dfat.infrastructure.repositories.artefact_repo import JSONArtefactRepository
@@ -97,9 +103,18 @@ from dfat.forensic_engine.processing.timeline import TimelineGenerator
 from dfat.forensic_engine.triage.aggregator import TriageAggregator
 from dfat.forensic_engine.triage.rule_engine import RuleBasedTriageEngine
 from dfat.forensic_engine.triage.scoring import ScoringEngine
+from dfat.reporting.exporters.html_exporter import HTMLReportExporter
+from dfat.reporting.exporters.json_file_exporter import JSONFileExporter
+from dfat.reporting.exporters.pdf_exporter import PDFReportExporter
+from dfat.reporting.generators.audit_report import AuditReportGenerator
+from dfat.reporting.generators.custody_report import CustodyReportGenerator
+from dfat.reporting.integrity import ReportIntegrityVerifier
 from dfat.reporting.json_layer import StructuredJSONExporter
 from dfat.reporting.narrative import NarrativeAssembler
 from dfat.reporting.report_builder import DualOutputReportBuilder
+from dfat.reporting.reproducibility import ReproducibilityVerifier
+from dfat.reporting.schema import ReportSchemaValidator
+from dfat.reporting.schema.schema_versions import get_schema_path as _canonical_schema_path
 from dfat.auth.jwt_handler import JWTHandler
 from dfat.auth.password import PasswordHasher
 from dfat.auth.rbac import PermissionChecker
@@ -651,14 +666,21 @@ class AIEngineContainer(containers.DeclarativeContainer):
 
 
 _PACKAGE_TEMPLATE_DIR = Path(__file__).resolve().parent / "reporting" / "templates"
+_PACKAGE_SCHEMA_DIR = Path(__file__).resolve().parent / "reporting" / "schema"
 
 
 def _report_schema_path(settings: DFATSettings) -> Path:
-    """Resolve the JSON report schema path."""
+    """Resolve the JSON report schema path (canonical schema package preferred)."""
     configured = Path(settings.reporting.template_dir) / "report_schema.json"
     if configured.exists():
         return configured
-    return _PACKAGE_TEMPLATE_DIR / "report_schema.json"
+    canonical = _PACKAGE_SCHEMA_DIR / "report_schema.json"
+    if canonical.exists():
+        return canonical
+    try:
+        return _canonical_schema_path()
+    except KeyError:
+        return _PACKAGE_TEMPLATE_DIR / "report_schema.json"
 
 
 def _template_dir(settings: DFATSettings) -> Path:
@@ -675,22 +697,56 @@ class ReportingEngineContainer(containers.DeclarativeContainer):
     settings = providers.Dependency(instance_of=DFATSettings)
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
     report_repo = providers.Dependency(instance_of=FileSystemReportRepository)
+    audit_repo = providers.Dependency(instance_of=SQLAlchemyAuditRepository)
 
+    audit_service = providers.Factory(
+        AuditService,
+        audit_repo=audit_repo,
+        forensic_audit_logger=audit_logger,
+    )
+    schema_validator = providers.Singleton(
+        ReportSchemaValidator,
+        schema_path=providers.Callable(_report_schema_path, settings),
+    )
     json_exporter = providers.Singleton(
         StructuredJSONExporter,
-        schema_path=providers.Callable(_report_schema_path, settings),
+        schema_validator=schema_validator,
         hash_algorithm=providers.Callable(_primary_hash, settings),
     )
     narrative_assembler = providers.Singleton(
         NarrativeAssembler,
         template_dir=providers.Callable(_template_dir, settings),
     )
+    integrity_verifier = providers.Singleton(
+        ReportIntegrityVerifier,
+        hash_algorithm=providers.Callable(_primary_hash, settings),
+    )
+    reproducibility_verifier = providers.Singleton(
+        ReproducibilityVerifier,
+        hash_algorithm=providers.Callable(_primary_hash, settings),
+    )
     report_builder = providers.Singleton(
         DualOutputReportBuilder,
         json_exporter=json_exporter,
         narrative_assembler=narrative_assembler,
+        integrity_verifier=integrity_verifier,
         report_repo=report_repo,
-        audit_logger=audit_logger,
+        audit_service=audit_service,
+    )
+    # Same provider exposed under the IReportGenerator port name.
+    report_generator: providers.Provider[IReportGenerator] = report_builder
+    pdf_exporter = providers.Singleton(
+        PDFReportExporter,
+        output_dir=providers.Callable(_output_dir, settings),
+    )
+    html_exporter = providers.Singleton(
+        HTMLReportExporter,
+        output_dir=providers.Callable(_output_dir, settings),
+        template_dir=providers.Callable(_template_dir, settings),
+    )
+    json_file_exporter = providers.Singleton(
+        JSONFileExporter,
+        integrity_verifier=integrity_verifier,
     )
 
 
@@ -714,19 +770,50 @@ class EvaluationEngineContainer(containers.DeclarativeContainer):
 
     settings = providers.Dependency(instance_of=DFATSettings)
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+    audit_repo = providers.Dependency(instance_of=SQLAlchemyAuditRepository)
+    benchmark_repo = providers.Dependency(instance_of=SQLAlchemyBenchmarkRepository)
+    usability_repo = providers.Dependency(instance_of=SQLAlchemyUsabilityRepository)
 
+    dfrws_handler = providers.Singleton(
+        DFRWSHandler,
+        datasets_dir=providers.Callable(_ground_truth_dir, settings),
+    )
+    cfreds_handler = providers.Singleton(
+        CFReDSHandler,
+        datasets_dir=providers.Callable(_ground_truth_dir, settings),
+    )
     ground_truth_loader = providers.Singleton(
         GroundTruthLoader,
         ground_truth_dir=providers.Callable(_ground_truth_dir, settings),
+        dfrws=dfrws_handler,
+        cfreds=cfreds_handler,
     )
     metrics_calculator = providers.Singleton(MetricsCalculator)
+    audit_service = providers.Factory(
+        AuditService,
+        audit_repo=audit_repo,
+        forensic_audit_logger=audit_logger,
+    )
     comparator = providers.Singleton(
         BenchmarkComparator,
-        metrics_calculator=metrics_calculator,
-        audit_logger=audit_logger,
+        metrics=metrics_calculator,
+        ground_truth_loader=ground_truth_loader,
+        audit_service=audit_service,
+        benchmark_repo=benchmark_repo,
         thresholds=providers.Callable(_metric_thresholds, settings),
     )
+    metrics_visualiser = providers.Singleton(MetricsVisualiser)
+    performance_analyzer = providers.Singleton(
+        PerformanceAnalyzer,
+        benchmark_repo=benchmark_repo,
+    )
     questionnaire_model = providers.Singleton(QuestionnaireInstrument)
+    response_collector = providers.Singleton(
+        ResponseCollector,
+        questionnaire=questionnaire_model,
+        usability_repo=usability_repo,
+        audit_service=audit_service,
+    )
     response_analyzer = providers.Factory(ResponseAnalyzer)
 
 
@@ -1007,6 +1094,14 @@ class ServicesContainer(containers.DeclarativeContainer):
     benchmark_comparator = providers.Dependency(instance_of=BenchmarkComparator)
     ground_truth_loader = providers.Dependency(instance_of=GroundTruthLoader)
     forensic_audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+    pdf_exporter = providers.Dependency(instance_of=PDFReportExporter)
+    html_exporter = providers.Dependency(instance_of=HTMLReportExporter)
+    json_file_exporter = providers.Dependency(instance_of=JSONFileExporter)
+    integrity_verifier = providers.Dependency(instance_of=ReportIntegrityVerifier)
+    reproducibility_verifier = providers.Dependency(instance_of=ReproducibilityVerifier)
+    response_collector = providers.Dependency(instance_of=ResponseCollector)
+    performance_analyzer = providers.Dependency(instance_of=PerformanceAnalyzer)
+    questionnaire_model = providers.Dependency(instance_of=QuestionnaireInstrument)
 
     mime_identifier = providers.Singleton(MIMEIdentifier)
     evidence_metadata_service = providers.Factory(
@@ -1035,6 +1130,16 @@ class ServicesContainer(containers.DeclarativeContainer):
         hash_service=multi_hash_service,
         audit_service=audit_service,
         evidence_repo=evidence_repo,
+    )
+    custody_report_generator = providers.Factory(
+        CustodyReportGenerator,
+        custody_service=chain_of_custody_service,
+        hash_service=multi_hash_service,
+        template_dir=providers.Callable(_template_dir, settings),
+    )
+    audit_report_generator = providers.Factory(
+        AuditReportGenerator,
+        audit_service=audit_service,
     )
     case_service = providers.Factory(
         CaseService,
@@ -1088,6 +1193,16 @@ class ServicesContainer(containers.DeclarativeContainer):
         ReportService,
         report_repo=report_repo,
         audit_repo=audit_repo,
+        pdf_exporter=pdf_exporter,
+        html_exporter=html_exporter,
+        json_file_exporter=json_file_exporter,
+        integrity_verifier=integrity_verifier,
+        reproducibility_verifier=reproducibility_verifier,
+        custody_report_generator=custody_report_generator,
+        audit_report_generator=audit_report_generator,
+        case_repo=case_repo,
+        evidence_repo=evidence_repo,
+        export_dir=providers.Callable(_output_dir, settings),
     )
     evaluation_service = providers.Factory(
         EvaluationService,
@@ -1096,6 +1211,10 @@ class ServicesContainer(containers.DeclarativeContainer):
         benchmark_comparator=benchmark_comparator,
         ground_truth_loader=ground_truth_loader,
         audit_repo=audit_repo,
+        artefact_repo=artefact_repo,
+        response_collector=response_collector,
+        performance_analyzer=performance_analyzer,
+        questionnaire=questionnaire_model,
     )
 
 
@@ -1132,11 +1251,15 @@ class ApplicationContainer(containers.DeclarativeContainer):
         settings=settings,
         audit_logger=logging.forensic_audit_logger,
         report_repo=repositories.file_report_repo,
+        audit_repo=repositories.audit_repo,
     )
     evaluation_engine = providers.Container(
         EvaluationEngineContainer,
         settings=settings,
         audit_logger=logging.forensic_audit_logger,
+        audit_repo=repositories.audit_repo,
+        benchmark_repo=repositories.benchmark_repo,
+        usability_repo=repositories.usability_repo,
     )
     pipeline = providers.Container(
         PipelineContainer,
@@ -1189,6 +1312,14 @@ class ApplicationContainer(containers.DeclarativeContainer):
         benchmark_comparator=evaluation_engine.comparator,
         ground_truth_loader=evaluation_engine.ground_truth_loader,
         forensic_audit_logger=logging.forensic_audit_logger,
+        pdf_exporter=reporting_engine.pdf_exporter,
+        html_exporter=reporting_engine.html_exporter,
+        json_file_exporter=reporting_engine.json_file_exporter,
+        integrity_verifier=reporting_engine.integrity_verifier,
+        reproducibility_verifier=reporting_engine.reproducibility_verifier,
+        response_collector=evaluation_engine.response_collector,
+        performance_analyzer=evaluation_engine.performance_analyzer,
+        questionnaire_model=evaluation_engine.questionnaire_model,
     )
 
 

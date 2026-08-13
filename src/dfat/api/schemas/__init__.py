@@ -5,15 +5,22 @@ from dfat.api.schemas.requests import (
     BenchmarkRunRequest,
     EvidenceUploadRequest,
     PipelineRunRequest,
+    ReportCompareRequest,
+    UsabilityRespondRequest,
 )
 from dfat.api.schemas.responses import (
     AnalysisStatusResponse,
     BenchmarkResponse,
+    DatasetListResponse,
     ErrorResponse,
     EvidenceResponse,
+    IntegrityVerifyResponse,
     ParserInfoResponse,
     ParserListResponse,
     ReportResponse,
+    ReproducibilityCompareResponse,
+    UsabilityDeleteResponse,
+    UsabilitySubmitResponse,
 )
 
 __all__ = [
@@ -21,11 +28,18 @@ __all__ = [
     "AnalysisStatusResponse",
     "BenchmarkResponse",
     "BenchmarkRunRequest",
+    "DatasetListResponse",
     "ErrorResponse",
     "EvidenceResponse",
     "EvidenceUploadRequest",
+    "IntegrityVerifyResponse",
     "ParserInfoResponse",
     "ParserListResponse",
     "PipelineRunRequest",
+    "ReportCompareRequest",
     "ReportResponse",
+    "ReproducibilityCompareResponse",
+    "UsabilityDeleteResponse",
+    "UsabilityRespondRequest",
+    "UsabilitySubmitResponse",
 ]

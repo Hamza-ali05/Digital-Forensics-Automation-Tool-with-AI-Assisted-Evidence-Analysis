@@ -1,0 +1,66 @@
+{# DFAT formal chain-of-custody report (plain text / evidence package) #}
+================================================================================
+DFAT CHAIN OF CUSTODY REPORT
+================================================================================
+
+Case name:          {{ case_name }}
+Evidence ID:        {{ evidence_id }}
+Evidence file path: {{ evidence_file_path }}
+Generated at (UTC): {{ generated_at }}
+
+--------------------------------------------------------------------------------
+INTEGRITY HASH SET (defence-in-depth)
+--------------------------------------------------------------------------------
+MD5:    {{ hash_set.md5 }}
+SHA-1:  {{ hash_set.sha1 }}
+SHA-256:{{ hash_set.sha256 }}
+File size (bytes): {{ hash_set.file_size_bytes }}
+Hashes computed at: {{ hash_set.computed_at.isoformat() }}
+
+--------------------------------------------------------------------------------
+CUSTODY TIMELINE SUMMARY
+--------------------------------------------------------------------------------
+First acquired (UTC): {{ first_acquired }}
+Last action (UTC):    {{ last_action }}
+Chain length:         {{ chain_length }}
+Integrity verified:   {{ integrity_verified }}
+
+--------------------------------------------------------------------------------
+VERIFICATION RESULT
+--------------------------------------------------------------------------------
+is_valid:            {{ verification.get('is_valid') }}
+total_entries:       {{ verification.get('total_entries') }}
+integrity_verified:  {{ verification.get('integrity_verified') }}
+{% if issues %}
+Issues:
+{% for issue in issues %}
+  - {{ issue }}
+{% endfor %}
+{% else %}
+Issues: (none)
+{% endif %}
+
+--------------------------------------------------------------------------------
+COMPLETE CHAIN OF CUSTODY ENTRIES
+--------------------------------------------------------------------------------
+{% if chain %}
+{% for record in chain %}
+Entry #{{ record.entry_number if record.entry_number is not none else loop.index }}
+  Record ID:     {{ record.record_id }}
+  Timestamp:     {{ record.timestamp.isoformat() }}
+  Action:        {{ record.action.value if record.action.value is defined else record.action }}
+  Performed by:  {{ record.performed_by_name }} ({{ record.performed_by_user_id }})
+  Reason:        {{ record.reason }}
+  Hash at action:{{ record.hash_at_action }}
+  Location:      {{ record.location }}
+  Notes:         {{ record.notes if record.notes else "(none)" }}
+
+{% endfor %}
+{% else %}
+(No custody entries recorded.)
+{% endif %}
+================================================================================
+This custody report is suitable for inclusion in evidence packages and court
+documentation. Structured JSON remains the primary evidential artefact layer
+(Scanlon et al., 2023).
+================================================================================

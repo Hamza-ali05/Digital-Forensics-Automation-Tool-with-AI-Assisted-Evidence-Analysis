@@ -12,7 +12,9 @@ from dfat.core.models.artefact import ArtefactSet, RankedArtefact
 from dfat.core.models.evidence import CaseMetadata, EvidenceImage
 from dfat.core.models.pipeline import StageResult
 from dfat.core.models.report import ForensicReport, JSONReport, NarrativeReport
+from dfat.evaluation.benchmark.cfreds_handler import CFReDSHandler
 from dfat.evaluation.benchmark.comparator import BenchmarkComparator
+from dfat.evaluation.benchmark.dfrws_handler import DFRWSHandler
 from dfat.evaluation.benchmark.ground_truth import GroundTruthLoader
 from dfat.evaluation.benchmark.metrics import MetricsCalculator
 from dfat.pipeline.enums import JobStatus
@@ -163,11 +165,21 @@ def _pipeline(
         settings=DFATSettings(),
         evidence_management_service=evidence_mgmt,
         custody_service=custody,
-        ground_truth_loader=GroundTruthLoader(tmp_path),
+        ground_truth_loader=GroundTruthLoader(
+            tmp_path,
+            DFRWSHandler(tmp_path),
+            CFReDSHandler(tmp_path),
+        ),
         benchmark_comparator=BenchmarkComparator(
-            MetricsCalculator(),
-            mock_audit_logger,
-            {"precision_min": 0.0, "recall_min": 0.0, "f1_min": 0.0},
+            metrics=MetricsCalculator(),
+            ground_truth_loader=GroundTruthLoader(
+                tmp_path,
+                DFRWSHandler(tmp_path),
+                CFReDSHandler(tmp_path),
+            ),
+            audit_service=AsyncMock(),
+            benchmark_repo=AsyncMock(),
+            thresholds={"precision_min": 0.0, "recall_min": 0.0, "f1_min": 0.0},
         ),
     )
     return orchestrator, evidence

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,5 +40,22 @@ class BenchmarkRunRequest(BaseModel):
     """Request body for running a benchmark evaluation."""
 
     evidence_id: str
-    ground_truth_path: str
-    dataset_name: str
+    ground_truth_dataset: str = ""
+    dataset_source: Literal["dfrws", "cfreds"] = "dfrws"
+    # Legacy fields retained for older clients / tests.
+    ground_truth_path: Optional[str] = None
+    dataset_name: Optional[str] = None
+
+
+class ReportCompareRequest(BaseModel):
+    """Request body for reproducibility comparison of two reports."""
+
+    report_id_a: str
+    report_id_b: str
+
+
+class UsabilityRespondRequest(BaseModel):
+    """Anonymous usability questionnaire submission body."""
+
+    ratings: dict[str, int] = Field(default_factory=dict)
+    free_text: Optional[str] = None
