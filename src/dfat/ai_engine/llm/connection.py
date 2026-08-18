@@ -17,17 +17,18 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from dfat.ai_engine.llm.config import LLMConfig
+from dfat.api.schemas.base import API_JSON_ENCODERS
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
 
 logger = logging.getLogger(__name__)
 
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})  # nosec B104
 
 
 class LLMHealthStatus(BaseModel):
     """Result of an Ollama health probe."""
 
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(frozen=False, json_encoders=API_JSON_ENCODERS)
 
     is_healthy: bool
     model_loaded: bool

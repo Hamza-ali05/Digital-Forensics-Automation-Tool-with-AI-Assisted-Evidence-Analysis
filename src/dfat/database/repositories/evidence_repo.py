@@ -83,6 +83,31 @@ class SQLAlchemyEvidenceRepository(IEvidenceRepository):
                     context={"evidence_id": entity_id, "error": str(exc)},
                 ) from exc
 
+    async def get_by_ids(self, evidence_ids: list[str]) -> dict[str, EvidenceImage]:
+        """Batch-load evidence records keyed by identifier.
+
+        Args:
+            evidence_ids: Evidence identifiers to load.
+
+        Returns:
+            Mapping of evidence ID to domain record. Missing IDs are omitted.
+        """
+        unique_ids = list(dict.fromkeys(evidence_ids))
+        if not unique_ids:
+            return {}
+        async with self._session_factory() as session:
+            try:
+                result = await session.execute(
+                    select(EvidenceRecordORM).where(EvidenceRecordORM.id.in_(unique_ids))
+                )
+                rows = result.scalars().all()
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to load evidence by ids",
+                    context={"evidence_ids": unique_ids, "error": str(exc)},
+                ) from exc
+            return {row.id: evidence_orm_to_domain(row) for row in rows}
+
     async def get_by_case(self, case_id: str) -> list[EvidenceImage]:
         """List evidence belonging to a case.
 

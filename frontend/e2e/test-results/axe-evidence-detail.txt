@@ -1,0 +1,3 @@
+[moderate] heading-order: Heading levels should only increase by one (1 nodes)
+    - h5 Fix any of the following:
+  Heading order invalid

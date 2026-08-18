@@ -5,6 +5,7 @@ import Sidebar from "components/layout/Sidebar";
 import Topbar from "components/layout/Topbar";
 import Footer from "components/layout/Footer";
 import LoadingSpinner from "components/common/LoadingSpinner";
+import SkipToContent from "components/common/SkipToContent";
 
 /**
  * Main authenticated shell: Sidebar + Topbar + content + Footer.
@@ -29,9 +30,10 @@ export default function DashboardLayout({ children }) {
 
   return (
     <>
+      <SkipToContent />
       <LoadingSpinner show={!loaded} />
       <Sidebar show={sidebarOpen} onClose={closeSidebar} onToggle={toggleSidebar} />
-      <main className="content">
+      <main id="main-content" className="content" tabIndex={-1}>
         <Topbar onToggleSidebar={toggleSidebar} />
         <Container fluid className="px-0">
           {children}

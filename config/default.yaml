@@ -76,6 +76,8 @@ database:
   pool_size: 5
   max_overflow: 10
   create_tables_on_startup: true
+  slow_query_threshold_ms: 100
+  enable_query_monitoring: true
 
 # Local JWT authentication settings.
 auth:
@@ -91,6 +93,7 @@ auth:
 api:
   cors_allow_origins:
     - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
 
 # Five-stage forensic pipeline orchestration.
 pipeline:

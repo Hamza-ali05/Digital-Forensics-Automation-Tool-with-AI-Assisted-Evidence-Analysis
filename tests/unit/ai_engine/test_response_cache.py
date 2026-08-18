@@ -101,3 +101,21 @@ def test_compute_cache_key_deterministic() -> None:
     assert a == b
     assert a != c
     assert len(a) == 64
+    assert cache.ttl_seconds == 3600
+    prompt_digest = cache.prompt_hash("hello")
+    assert len(prompt_digest) == 64
+    different_model = cache._compute_cache_key("hello", "mistral", 0.1)
+    different_prompt = cache._compute_cache_key("other", "llama3", 0.1)
+    assert a != different_model
+    assert a != different_prompt
+
+
+@pytest.mark.asyncio
+async def test_warm_common_patterns_are_cache_hits() -> None:
+    cache = AIResponseCache(ttl_seconds=3600)
+    warmed = await cache.warm_common_patterns("llama3", 0.1)
+    assert warmed == 3
+    for prompt in cache.common_prompt_patterns():
+        hit = await cache.get(prompt, "llama3", 0.1)
+        assert hit is not None
+        assert hit.response.text == "[]"

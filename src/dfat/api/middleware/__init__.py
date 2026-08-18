@@ -1,6 +1,8 @@
 """DFAT API Middleware — Security, audit, rate limiting, and exception handling."""
 
 from dfat.api.middleware.audit import AuditTrailMiddleware
+from dfat.api.middleware.cache import ResponseCacheMiddleware
+from dfat.api.middleware.compression import CompressionMiddleware
 from dfat.api.middleware.cors import configure_cors
 from dfat.api.middleware.error_handler import GlobalExceptionHandler
 from dfat.api.middleware.rate_limiter import RateLimiterMiddleware, TokenBucket
@@ -10,10 +12,12 @@ from dfat.api.middleware.validation import RequestValidationMiddleware
 
 __all__ = [
     "AuditTrailMiddleware",
+    "CompressionMiddleware",
     "GlobalExceptionHandler",
     "RateLimiterMiddleware",
     "RequestIDMiddleware",
     "RequestValidationMiddleware",
+    "ResponseCacheMiddleware",
     "SecurityHeadersMiddleware",
     "TokenBucket",
     "configure_cors",

@@ -17,6 +17,7 @@ class ArtefactRecordORM(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "artefact_records"
     __table_args__ = (
         Index("ix_artefact_evidence_category", "evidence_id", "category"),
+        Index("ix_artefact_evidence_suspicion", "evidence_id", "suspicion_level"),
     )
 
     evidence_id: Mapped[str] = mapped_column(

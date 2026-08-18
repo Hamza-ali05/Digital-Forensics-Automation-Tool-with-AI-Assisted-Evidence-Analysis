@@ -3,6 +3,7 @@ import { Container } from "@themesberg/react-bootstrap";
 import { Link } from "react-router-dom";
 
 import LoadingSpinner from "components/common/LoadingSpinner";
+import SkipToContent from "components/common/SkipToContent";
 import config from "config";
 import { Routes } from "routes";
 
@@ -19,6 +20,7 @@ export default function MinimalLayout({ children }) {
 
   return (
     <>
+      <SkipToContent />
       <LoadingSpinner show={!loaded} />
       <div className="dfat-minimal-layout min-vh-100 bg-soft">
         <header className="border-bottom bg-white py-3">
@@ -34,7 +36,9 @@ export default function MinimalLayout({ children }) {
             </span>
           </Container>
         </header>
-        <Container className="py-4">{children}</Container>
+        <Container as="main" id="main-content" className="py-4" tabIndex={-1}>
+          {children}
+        </Container>
       </div>
     </>
   );

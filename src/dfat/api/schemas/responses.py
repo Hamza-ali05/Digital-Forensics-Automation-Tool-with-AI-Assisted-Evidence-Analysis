@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from dfat.api.schemas.base import APIModel
 from dfat.core.enums import EvidenceType
 
 
-class EvidenceResponse(BaseModel):
+class EvidenceResponse(APIModel):
     """Evidence metadata response."""
 
     evidence_id: str
@@ -21,7 +22,7 @@ class EvidenceResponse(BaseModel):
     registered_by: Optional[str] = None
 
 
-class AnalysisStatusResponse(BaseModel):
+class AnalysisStatusResponse(APIModel):
     """Pipeline analysis status response."""
 
     pipeline_id: str
@@ -31,7 +32,7 @@ class AnalysisStatusResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-class ReportResponse(BaseModel):
+class ReportResponse(APIModel):
     """Forensic report summary response."""
 
     report_id: str
@@ -42,7 +43,7 @@ class ReportResponse(BaseModel):
     pipeline_duration_seconds: float
 
 
-class IntegrityVerifyResponse(BaseModel):
+class IntegrityVerifyResponse(APIModel):
     """Report integrity verification outcome."""
 
     is_valid: bool
@@ -53,7 +54,7 @@ class IntegrityVerifyResponse(BaseModel):
     verified_at: datetime
 
 
-class ReproducibilityCompareResponse(BaseModel):
+class ReproducibilityCompareResponse(APIModel):
     """Reproducibility comparison of two reports."""
 
     is_reproducible: bool
@@ -67,7 +68,7 @@ class ReproducibilityCompareResponse(BaseModel):
     verified_at: datetime
 
 
-class BenchmarkResponse(BaseModel):
+class BenchmarkResponse(APIModel):
     """Benchmark evaluation response."""
 
     benchmark_id: str
@@ -83,27 +84,27 @@ class BenchmarkResponse(BaseModel):
     evaluated_at: Optional[datetime] = None
 
 
-class DatasetListResponse(BaseModel):
+class DatasetListResponse(APIModel):
     """Available local ground-truth datasets."""
 
     dfrws: list[str] = Field(default_factory=list)
     cfreds: list[str] = Field(default_factory=list)
 
 
-class UsabilitySubmitResponse(BaseModel):
+class UsabilitySubmitResponse(APIModel):
     """Acknowledgement of an anonymised usability submission."""
 
     participant_id: str
     message: str = "Response collected anonymously."
 
 
-class UsabilityDeleteResponse(BaseModel):
+class UsabilityDeleteResponse(APIModel):
     """Ethics data-destruction acknowledgement."""
 
     deleted_count: int
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(APIModel):
     """Standard API error response."""
 
     error_type: str
@@ -113,7 +114,7 @@ class ErrorResponse(BaseModel):
     request_id: Optional[str] = None
 
 
-class ParserInfoResponse(BaseModel):
+class ParserInfoResponse(APIModel):
     """Single artefact parser availability entry."""
 
     parser_name: str
@@ -121,7 +122,7 @@ class ParserInfoResponse(BaseModel):
     supported_evidence_types: list[str] = Field(default_factory=list)
 
 
-class ParserListResponse(BaseModel):
+class ParserListResponse(APIModel):
     """List of registered artefact parsers."""
 
     parsers: list[ParserInfoResponse] = Field(default_factory=list)

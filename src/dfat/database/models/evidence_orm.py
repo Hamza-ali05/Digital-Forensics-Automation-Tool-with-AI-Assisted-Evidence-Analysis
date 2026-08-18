@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from dfat.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -21,6 +21,9 @@ class EvidenceRecordORM(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """
 
     __tablename__ = "evidence_records"
+    __table_args__ = (
+        Index("ix_evidence_records_case_status", "case_id", "status"),
+    )
 
     case_id: Mapped[str] = mapped_column(String(36), index=True)
     case_name: Mapped[str] = mapped_column(String(255))

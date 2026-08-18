@@ -34,5 +34,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         """
         response = await call_next(request)
         for header, value in _SECURITY_HEADERS.items():
+            if (
+                header.lower() == "cache-control"
+                and response.headers.get("x-cache")
+            ):
+                # Preserve Cache-Control set by ResponseCacheMiddleware.
+                continue
             response.headers[header] = value
         return response

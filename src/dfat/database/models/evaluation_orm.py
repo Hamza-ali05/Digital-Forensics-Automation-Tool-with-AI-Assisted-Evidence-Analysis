@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from dfat.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -15,6 +15,9 @@ class BenchmarkRecordORM(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """Persisted benchmark evaluation metrics."""
 
     __tablename__ = "benchmark_records"
+    __table_args__ = (
+        Index("ix_benchmark_dataset_evaluated", "dataset_name", "evaluated_at"),
+    )
 
     dataset_name: Mapped[str] = mapped_column(String(255))
     evidence_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)

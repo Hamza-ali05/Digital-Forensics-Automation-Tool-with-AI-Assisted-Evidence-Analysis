@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from dfat.api.path_safety import assert_no_path_traversal
 
 from dfat.core.enums import EvidenceType
 
@@ -17,6 +19,11 @@ class EvidenceUploadRequest(BaseModel):
     investigator: str
     description: Optional[str] = None
     evidence_type: EvidenceType
+
+    @field_validator("file_path")
+    @classmethod
+    def _reject_traversal(cls, value: str) -> str:
+        return assert_no_path_traversal(value)
 
 
 class AnalysisRunRequest(BaseModel):

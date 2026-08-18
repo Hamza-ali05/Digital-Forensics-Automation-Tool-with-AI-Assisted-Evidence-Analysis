@@ -26,6 +26,7 @@ export default function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted"
+              aria-label="System status (opens in a new tab)"
             >
               System status
             </a>

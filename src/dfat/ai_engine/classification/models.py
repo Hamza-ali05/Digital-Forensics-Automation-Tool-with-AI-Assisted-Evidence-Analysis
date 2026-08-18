@@ -6,6 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from dfat.ai_engine.llm.config import PROMPT_VERSION
 from dfat.core.enums import SuspicionLevel
 
 
@@ -20,3 +21,4 @@ class ClassificationResult(BaseModel):
     ioc_indicators: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     raw_llm_response: Optional[str] = None
+    prompt_version: str = PROMPT_VERSION

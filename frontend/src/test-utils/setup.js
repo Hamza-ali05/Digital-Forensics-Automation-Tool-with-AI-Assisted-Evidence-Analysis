@@ -51,18 +51,31 @@ if (typeof global.crypto.randomUUID !== "function") {
 delete window.location;
 window.location = {
   href: "http://localhost/",
+  origin: "http://localhost",
+  protocol: "http:",
+  host: "localhost",
+  hostname: "localhost",
+  port: "",
   pathname: "/",
+  search: "",
+  hash: "",
   assign: jest.fn(),
   replace: jest.fn(),
   reload: jest.fn(),
 };
+
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = jest.fn();
+}
 
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
 afterEach(() => {
   server.resetHandlers();
   localStorage.clear();
   window.location.href = "http://localhost/";
+  window.location.origin = "http://localhost";
   window.location.pathname = "/";
+  window.location.search = "";
 });
 afterAll(() => server.close());
 

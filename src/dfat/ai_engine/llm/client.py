@@ -37,7 +37,7 @@ from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger
 
 logger = logging.getLogger(__name__)
 
-_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "0.0.0.0", "::1"})
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "0.0.0.0", "::1"})  # nosec B104
 
 
 class LLMResponse(BaseModel):
@@ -68,6 +68,7 @@ class OllamaClient:
         config: LLMConfig,
         connection_manager: LLMConnectionManager,
         audit_logger: ForensicAuditLogger,
+        cache: Optional[Any] = None,
     ) -> None:
         """Initialise the Ollama HTTP client.
 
@@ -75,11 +76,13 @@ class OllamaClient:
             config: Local LLM configuration.
             connection_manager: Connectivity / local-URL guard.
             audit_logger: Forensic audit logger (metadata only; never evidence).
+            cache: Optional ``AIResponseCache`` for identical prompt reuse.
         """
         connection_manager._is_local_url(config.api_url)
         self._config = config
         self._connection = connection_manager
         self._audit_logger = audit_logger
+        self._cache = cache
 
     async def generate(
         self,
@@ -104,14 +107,22 @@ class OllamaClient:
         """
         system_prompt = system if system is not None else self._config.system_prompt
         temp = self._config.temperature if temperature is None else temperature
+        cache = self._cache
+        if cache is not None:
+            cached = await cache.get(prompt, self._config.model, temp)
+            if cached is not None:
+                return cached.response
         body = self._build_request_body(prompt, system_prompt, temp)
         body["stream"] = False
-        return await self._post_with_retries(
+        response = await self._post_with_retries(
             url=self._config.generate_url,
             body=body,
             prompt_for_estimate=prompt,
             action="OLLAMA_GENERATE",
         )
+        if cache is not None:
+            await cache.put(prompt, self._config.model, temp, response)
+        return response
 
     async def generate_streaming(
         self,

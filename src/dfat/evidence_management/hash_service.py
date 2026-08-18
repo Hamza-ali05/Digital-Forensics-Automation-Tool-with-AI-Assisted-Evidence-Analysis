@@ -237,8 +237,8 @@ class MultiHashService:
                 context={"path": str(file_path), "evidence_id": evidence_id},
             )
 
-        md5 = hashlib.md5()  # noqa: S324 — forensic multi-hash defence-in-depth
-        sha1 = hashlib.sha1()  # noqa: S324 — forensic multi-hash defence-in-depth
+        md5 = hashlib.md5()  # nosec B324  # noqa: S324 — forensic multi-hash
+        sha1 = hashlib.sha1()  # nosec B324  # noqa: S324 — forensic multi-hash
         sha256 = hashlib.sha256()
         bytes_read = 0
 

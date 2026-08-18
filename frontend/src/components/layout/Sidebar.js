@@ -17,6 +17,8 @@ import {
   faCog,
   faUsers,
   faUserCircle,
+  faClipboardList,
+  faQuestionCircle,
   faTimes,
   faSignOutAlt,
   faUserPlus,
@@ -146,7 +148,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
           <span className="d-flex align-items-center">
             {icon ? (
               <span className="sidebar-icon">
-                <FontAwesomeIcon icon={icon} />{" "}
+                <FontAwesomeIcon icon={icon} aria-hidden="true" />
               </span>
             ) : null}
             <span className="sidebar-text">{title}</span>
@@ -181,14 +183,22 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
         <Navbar.Brand as={Link} to={Routes.Dashboard.path} className="me-lg-5">
           <span className="text-white fw-bold">{config.appName}</span>
         </Navbar.Brand>
-        <Navbar.Toggle as={Button} aria-controls="main-navbar" onClick={onToggle}>
+        <Navbar.Toggle
+          as={Button}
+          aria-controls="sidebar-nav"
+          aria-label="Open navigation"
+          onClick={onToggle}
+        >
           <span className="navbar-toggler-icon" />
         </Navbar.Toggle>
       </Navbar>
 
       <CSSTransition timeout={300} in={show} classNames="sidebar-transition">
         <SimpleBar
+          id="sidebar-nav"
           className={`collapse ${showClass} sidebar d-md-block bg-primary text-white`}
+          role="navigation"
+          aria-label="Primary"
         >
           <div className="sidebar-inner px-4 pt-3 d-flex flex-column" style={{ minHeight: "100%" }}>
             <div className="user-card d-flex d-md-none align-items-center justify-content-between pb-4">
@@ -210,12 +220,17 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   className="text-dark"
                   onClick={handleSignOut}
                 >
-                  <FontAwesomeIcon icon={faSignOutAlt} className="me-2" /> Sign Out
+                  <FontAwesomeIcon icon={faSignOutAlt} className="me-2" aria-hidden="true" /> Sign Out
                 </Button>
               </div>
-              <Nav.Link className="collapse-close d-md-none" onClick={onClose}>
-                <FontAwesomeIcon icon={faTimes} />
-              </Nav.Link>
+              <Button
+                variant="link"
+                className="collapse-close d-md-none text-white p-0"
+                onClick={onClose}
+                aria-label="Close navigation"
+              >
+                <FontAwesomeIcon icon={faTimes} aria-hidden="true" />
+              </Button>
             </div>
 
             <Nav className="flex-column pt-3 pt-md-0 flex-grow-1">
@@ -268,7 +283,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faClock} />{" "}
+                    <FontAwesomeIcon icon={faClock} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">Timeline</span>
                 </Nav.Link>
@@ -283,7 +298,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faBug} />{" "}
+                    <FontAwesomeIcon icon={faBug} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">IOCs</span>
                 </Nav.Link>
@@ -298,7 +313,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faAlignLeft} />{" "}
+                    <FontAwesomeIcon icon={faAlignLeft} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">Summary</span>
                 </Nav.Link>
@@ -314,7 +329,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faCode} />{" "}
+                    <FontAwesomeIcon icon={faCode} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">JSON Artefacts</span>
                 </Nav.Link>
@@ -334,7 +349,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faChartLine} />{" "}
+                    <FontAwesomeIcon icon={faChartLine} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">Benchmark</span>
                 </Nav.Link>
@@ -351,7 +366,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faHistory} />{" "}
+                    <FontAwesomeIcon icon={faHistory} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">History</span>
                 </Nav.Link>
@@ -366,7 +381,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                   onClick={onClose}
                 >
                   <span className="sidebar-icon">
-                    <FontAwesomeIcon icon={faTachometerAlt} />{" "}
+                    <FontAwesomeIcon icon={faTachometerAlt} aria-hidden="true" />{" "}
                   </span>
                   <span className="sidebar-text">Performance</span>
                 </Nav.Link>
@@ -393,8 +408,14 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                         link={Routes.SettingsUsers.path}
                         icon={faUsers}
                       />
+                      <NavItem
+                        title="Audit Logs"
+                        link={Routes.SettingsAudit.path}
+                        icon={faClipboardList}
+                      />
                     </>
                   ) : null}
+                  <NavItem title="Help" link={Routes.Help.path} icon={faQuestionCircle} />
                 </>
               ) : (
                 <>
@@ -402,6 +423,7 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                     <hr className="border-light opacity-25 my-2" />
                   </Nav.Item>
                   <NavItem title="Profile" link={Routes.Profile.path} icon={faUserCircle} />
+                  <NavItem title="Help" link={Routes.Help.path} icon={faQuestionCircle} />
                 </>
               )}
             </Nav>

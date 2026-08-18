@@ -106,6 +106,8 @@ class DatabaseSettings(BaseModel):
     pool_size: int = 5
     max_overflow: int = 10
     create_tables_on_startup: bool = True
+    slow_query_threshold_ms: int = 100
+    enable_query_monitoring: bool = True
 
 
 class AuthSettings(BaseModel):
@@ -124,7 +126,7 @@ class ApiSettings(BaseModel):
     """HTTP API surface settings (CORS, etc.)."""
 
     cors_allow_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:3000"]
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )
 
 

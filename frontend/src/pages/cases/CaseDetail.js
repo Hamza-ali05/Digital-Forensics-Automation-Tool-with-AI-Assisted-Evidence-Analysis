@@ -928,12 +928,13 @@ export default function CaseDetail() {
                 <Form.Label>User</Form.Label>
                 <Form.Select
                   value={assignForm.userId}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const userId = e.target.value;
                     setAssignForm((prev) => ({
                       ...prev,
-                      userId: e.target.value,
-                    }))
-                  }
+                      userId,
+                    }));
+                  }}
                   required
                 >
                   <option value="">Select user…</option>
@@ -949,12 +950,13 @@ export default function CaseDetail() {
                 <Form.Label>User ID</Form.Label>
                 <Form.Control
                   value={assignForm.userId}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const userId = e.target.value;
                     setAssignForm((prev) => ({
                       ...prev,
-                      userId: e.target.value,
-                    }))
-                  }
+                      userId,
+                    }));
+                  }}
                   placeholder="User UUID"
                   required
                 />
@@ -964,9 +966,10 @@ export default function CaseDetail() {
               <Form.Label>Role</Form.Label>
               <Form.Select
                 value={assignForm.role}
-                onChange={(e) =>
-                  setAssignForm((prev) => ({ ...prev, role: e.target.value }))
-                }
+                onChange={(e) => {
+                  const role = e.target.value;
+                  setAssignForm((prev) => ({ ...prev, role }));
+                }}
               >
                 <option value="member">Member</option>
                 <option value="lead">Lead</option>

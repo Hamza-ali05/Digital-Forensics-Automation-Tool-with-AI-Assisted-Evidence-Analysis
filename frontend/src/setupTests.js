@@ -1,5 +1,6 @@
 /**
  * CRA automatically loads this file before tests.
- * Full setup lives in ``test-utils/setup.js`` (Prompt 7.15).
+ * Set absolute API base before any module reads config (Node axios needs it).
  */
-import "./test-utils/setup";
+require("./test-utils/env");
+require("./test-utils/setup");

@@ -38,12 +38,12 @@ $blue:    #0948B3;
 $indigo:  #4c5680;
 $purple:  #8965e0;
 $pink:    #C96480;
-$red:     #FA5252;
+$red:     #c53030;
 $orange:  #FF9F89;
 $brown:   #b9a084;
 $yellow:  #f5b759;
 $yellow-alt:#fde9ca;
-$green:   #05A677;
+$green:   #047857;
 $teal:    #1E90FF;
 $cyan:    #63b1bd;
 $soft-indigo:#f5e8ff;
@@ -70,7 +70,7 @@ $colors: (
 // Color scheme
 $default:       #262B40;
 $primary:       #262B40;
-$secondary:     #61DAFB;
+$secondary:     #155e75;
 $tertiary:      #1B998B;
 $quaternary:    #C96480;
 
@@ -798,7 +798,7 @@ $input-bg:                              $white;
 $input-disabled-bg:                     $gray-200;
 $input-disabled-border-color:           null;
 
-$input-color:                           $gray-700;
+$input-color:                           $dark;
 $input-border-color:                    $gray-500;
 $input-border-width:                    $input-btn-border-width;
 $input-box-shadow:                      $box-shadow-inset;
@@ -1535,8 +1535,8 @@ $breadcrumb-divider:                quote("/");
 $breadcrumb-border-radius:          $border-radius;
 
 $breadcrumb-active-color:        $white;
-$breadcrumb-divider-color:       $gray-700;
-$breadcrumb-item-color:          $gray-700;
+$breadcrumb-divider-color:       $gray-900;
+$breadcrumb-item-color:          $dark;
 $breadcrumb-font-weight:         $font-weight-normal;
 $breadcrumb-active-font-weight:  $font-weight-normal;
 $breadcrumb-item-light-color:    $white;

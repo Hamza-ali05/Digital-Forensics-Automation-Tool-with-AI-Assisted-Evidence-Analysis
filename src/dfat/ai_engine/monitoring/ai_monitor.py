@@ -14,6 +14,7 @@ from typing import Any, Optional, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from dfat.ai_engine.validation.hallucination_guard import HallucinationReport
+from dfat.api.schemas.base import API_JSON_ENCODERS
 from dfat.core.enums import PipelineStage
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class AuditLoggerPort(Protocol):
 class AIUsageStats(BaseModel):
     """Aggregated AI usage statistics for a monitoring window."""
 
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(frozen=False, json_encoders=API_JSON_ENCODERS)
 
     total_requests: int = 0
     total_tokens_in: int = 0

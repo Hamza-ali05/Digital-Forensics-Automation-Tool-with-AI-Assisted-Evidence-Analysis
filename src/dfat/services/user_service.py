@@ -10,6 +10,7 @@ from dfat.auth.exceptions import (
     AccountDisabledError,
     AccountLockedError,
     AuthenticationError,
+    InsufficientPermissionsError,
     InvalidCredentialsError,
     RoleNotFoundError,
     TokenInvalidError,
@@ -103,6 +104,13 @@ class UserService:
                 f"Role not found: {request.role_name}",
                 context={"role_name": request.role_name},
             )
+        if request.role_name.lower() == "admin":
+            registrar_role = await self._registrar_role(registered_by)
+            if registrar_role != "admin":
+                raise InsufficientPermissionsError(
+                    required_permission="users:create:admin",
+                    user_role=registrar_role or "unknown",
+                )
         user = UserORM(
             id=str(uuid4()),
             username=request.username,
@@ -340,6 +348,21 @@ class UserService:
             details=details,
         )
         await self._audit_repo.log_entry(entry, user_id=user_id)
+
+    async def _registrar_role(self, registered_by: Optional[str]) -> Optional[str]:
+        """Return the registering user's role name, if known."""
+        if not registered_by:
+            return None
+        registrar = await self._user_repo.get(registered_by)
+        if registrar is None:
+            return None
+        role = getattr(registrar, "role", None)
+        if role is not None and getattr(role, "name", None):
+            return str(role.name)
+        role_id = str(registrar.role_id)
+        if role_id.startswith("role-"):
+            return role_id.removeprefix("role-")
+        return role_id
 
     @staticmethod
     def _is_locked(user: UserORM) -> bool:

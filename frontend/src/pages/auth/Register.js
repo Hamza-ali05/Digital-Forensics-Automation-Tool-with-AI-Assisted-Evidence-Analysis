@@ -113,7 +113,7 @@ export default function Register() {
           <Col xs={12} className="d-flex align-items-center justify-content-center">
             <div className="bg-white shadow-soft border rounded border-light p-4 p-lg-5 w-100 fmxw-500">
               <div className="text-center mb-4">
-                <h3 className="mb-0">Register user</h3>
+                <h1 className="h3 mb-0">Register user</h1>
                 <p className="text-gray mb-0">
                   Create an investigator or analyst account
                 </p>
@@ -127,8 +127,9 @@ export default function Register() {
 
               <Form onSubmit={handleSubmit} noValidate>
                 <Form.Group className="mb-3">
-                  <Form.Label>Username</Form.Label>
+                  <Form.Label htmlFor="register-username">Username</Form.Label>
                   <Form.Control
+                    id="register-username"
                     value={form.username}
                     onChange={(e) => setField("username", e.target.value)}
                     isInvalid={Boolean(fieldErrors.username)}
@@ -141,8 +142,9 @@ export default function Register() {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Email</Form.Label>
+                  <Form.Label htmlFor="register-email">Email</Form.Label>
                   <Form.Control
+                    id="register-email"
                     type="email"
                     value={form.email}
                     onChange={(e) => setField("email", e.target.value)}
@@ -156,8 +158,9 @@ export default function Register() {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Full name</Form.Label>
+                  <Form.Label htmlFor="register-full-name">Full name</Form.Label>
                   <Form.Control
+                    id="register-full-name"
                     value={form.full_name}
                     onChange={(e) => setField("full_name", e.target.value)}
                     isInvalid={Boolean(fieldErrors.full_name)}
@@ -170,8 +173,9 @@ export default function Register() {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Role</Form.Label>
+                  <Form.Label htmlFor="register-role">Role</Form.Label>
                   <Form.Control
+                    id="register-role"
                     as="select"
                     value={form.role_name}
                     onChange={(e) => setField("role_name", e.target.value)}
@@ -187,8 +191,9 @@ export default function Register() {
                 </Form.Group>
 
                 <Form.Group className="mb-2">
-                  <Form.Label>Password</Form.Label>
+                  <Form.Label htmlFor="register-password">Password</Form.Label>
                   <Form.Control
+                    id="register-password"
                     type="password"
                     value={form.password}
                     onChange={(e) => setField("password", e.target.value)}
@@ -203,8 +208,11 @@ export default function Register() {
                 <PasswordStrength password={form.password} />
 
                 <Form.Group className="mb-4">
-                  <Form.Label>Confirm password</Form.Label>
+                  <Form.Label htmlFor="register-confirm-password">
+                    Confirm password
+                  </Form.Label>
                   <Form.Control
+                    id="register-confirm-password"
                     type="password"
                     value={form.confirmPassword}
                     onChange={(e) => setField("confirmPassword", e.target.value)}

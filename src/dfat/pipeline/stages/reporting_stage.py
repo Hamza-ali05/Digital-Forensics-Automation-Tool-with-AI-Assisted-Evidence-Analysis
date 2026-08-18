@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from typing import Any
@@ -140,6 +141,10 @@ class ReportingStage(IPipelineStage):
             timings[self.stage_name.value] = duration
             report.stage_timings = dict(timings)
             report.pipeline_duration_seconds = float(sum(timings.values()))
+
+            persisted = self._report_builder.persist_report(report)
+            if inspect.isawaitable(persisted):
+                await persisted
 
             context.report = report
             context.stage_timings[self.stage_name.value] = duration

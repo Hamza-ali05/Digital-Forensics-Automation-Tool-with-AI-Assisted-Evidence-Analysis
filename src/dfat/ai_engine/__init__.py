@@ -12,6 +12,7 @@ from dfat.ai_engine.llm import (
     LLMResponse,
     OllamaClient,
 )
+from dfat.ai_engine.optimization import PromptOptimizer
 from dfat.ai_engine.preprocessing import (
     ArtefactBatcher,
     ArtefactSerializer,
@@ -37,6 +38,7 @@ __all__ = [
     "LLMResponse",
     "LocalLLMClient",
     "OllamaClient",
+    "PromptOptimizer",
     "RelevanceRanker",
     "RuleBasedAnalyzer",
     "TokenTruncator",

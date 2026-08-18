@@ -56,6 +56,15 @@ def _to_case_response(case: Case) -> CaseResponse:
     )
 
 
+async def _ensure_case_access(
+    case_service: CaseService,
+    case_id: str,
+    current_user: UserORM,
+) -> None:
+    """Reject callers who cannot see the target case."""
+    await case_service.ensure_access(case_id, current_user)
+
+
 @router.post(
     "",
     response_model=CaseResponse,
@@ -82,11 +91,20 @@ async def list_cases(
         alias="status",
         description="Optional case status filter",
     ),
-    _: UserORM = Depends(require_permission("cases", "read")),
+    search: Optional[str] = Query(
+        default=None,
+        max_length=200,
+        description="Optional case-name search (parameterized)",
+    ),
+    current_user: UserORM = Depends(require_permission("cases", "read")),
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseListResponse:
-    """List cases, optionally filtered by status."""
-    cases = await case_service.list_cases(status=status_filter)
+    """List cases, optionally filtered by status and name search."""
+    cases = await case_service.list_cases(
+        status=status_filter,
+        search=search,
+        requester=current_user,
+    )
     items = [_to_case_response(case) for case in cases]
     return CaseListResponse(cases=items, total=len(items))
 
@@ -105,21 +123,22 @@ async def get_my_cases(
 @router.get("/{case_id}", response_model=CaseResponse)
 async def get_case(
     case_id: str,
-    _: UserORM = Depends(require_permission("cases", "read")),
+    current_user: UserORM = Depends(require_permission("cases", "read")),
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Get case detail by ID."""
-    case = await case_service.get_case(case_id)
+    case = await case_service.get_case(case_id, requester=current_user)
     return _to_case_response(case)
 
 
 @router.get("/{case_id}/summary", response_model=CaseSummaryResponse)
 async def get_case_summary(
     case_id: str,
-    _: UserORM = Depends(require_permission("cases", "read")),
+    current_user: UserORM = Depends(require_permission("cases", "read")),
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseSummaryResponse:
     """Get a comprehensive case summary."""
+    await _ensure_case_access(case_service, case_id, current_user)
     summary = await case_service.get_case_summary(case_id)
     return CaseSummaryResponse(**summary)
 
@@ -131,6 +150,7 @@ async def open_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Open a case (CREATED → OPEN). Requires a lead investigator."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.open_case(case_id, current_user.id)
     return _to_case_response(case)
 
@@ -142,6 +162,7 @@ async def activate_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Activate a case (OPEN → ACTIVE)."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.activate_case(case_id, current_user.id)
     return _to_case_response(case)
 
@@ -153,6 +174,7 @@ async def submit_for_review(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Submit a case for review (ACTIVE → UNDER_REVIEW)."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.submit_for_review(case_id, current_user.id)
     return _to_case_response(case)
 
@@ -165,6 +187,7 @@ async def reopen_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Reopen a case under review (UNDER_REVIEW → ACTIVE)."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.reopen_case(case_id, current_user.id, body.reason)
     return _to_case_response(case)
 
@@ -177,6 +200,7 @@ async def close_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Close a case and seal linked evidence custody chains."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.close_case(case_id, current_user.id, body.reason)
     return _to_case_response(case)
 
@@ -188,6 +212,7 @@ async def archive_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Archive a closed case (CLOSED → ARCHIVED)."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.archive_case(case_id, current_user.id)
     return _to_case_response(case)
 
@@ -200,6 +225,7 @@ async def assign_investigator(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Assign an investigator to a case."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.assign_investigator(
         case_id,
         body.user_id,
@@ -217,6 +243,7 @@ async def remove_investigator(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Soft-remove an investigator from a case."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.remove_investigator(
         case_id,
         user_id,
@@ -233,6 +260,7 @@ async def add_evidence_to_case(
     case_service: CaseService = Depends(get_case_service),
 ) -> CaseResponse:
     """Associate existing evidence with a case."""
+    await _ensure_case_access(case_service, case_id, current_user)
     case = await case_service.add_evidence_to_case(
         case_id,
         body.evidence_id,

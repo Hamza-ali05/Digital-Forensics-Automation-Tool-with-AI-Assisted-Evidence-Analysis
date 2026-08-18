@@ -448,7 +448,7 @@ export default function EvidenceDetail() {
                   <Col xs={12} lg={6} className="mb-4">
                     <Card border="light" className="shadow-sm h-100">
                       <Card.Header className="border-bottom border-light">
-                        <h5 className="mb-0">Info</h5>
+                        <h2 className="h5 mb-0">Info</h2>
                       </Card.Header>
                       <Card.Body>
                         <Table borderless className="mb-0">
@@ -534,7 +534,7 @@ export default function EvidenceDetail() {
                   <Col xs={12}>
                     <Card border="light" className="shadow-sm">
                       <Card.Header className="border-bottom border-light">
-                        <h5 className="mb-0">Validation</h5>
+                        <h2 className="h5 mb-0">Validation</h2>
                       </Card.Header>
                       <Card.Body>
                         <div className="mb-2">
@@ -625,7 +625,7 @@ export default function EvidenceDetail() {
 
               <Tab.Pane eventKey="custody">
                 <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                  <h5 className="mb-0">Custody chain</h5>
+                  <h2 className="h5 mb-0">Custody chain</h2>
                   <Button
                     size="sm"
                     variant="outline-primary"
@@ -721,7 +721,7 @@ export default function EvidenceDetail() {
               <Tab.Pane eventKey="metadata">
                 <Row>
                   <Col xs={12} lg={5} className="mb-4">
-                    <h5 className="mb-3">File timestamps</h5>
+                    <h2 className="h5 mb-3">File timestamps</h2>
                     <Table borderless>
                       <tbody>
                         <tr>
@@ -753,7 +753,7 @@ export default function EvidenceDetail() {
                     </Table>
                   </Col>
                   <Col xs={12} lg={7}>
-                    <h5 className="mb-3">Full metadata</h5>
+                    <h2 className="h5 mb-3">Full metadata</h2>
                     <pre
                       className="bg-light border rounded p-3 small mb-0"
                       style={{
@@ -774,7 +774,7 @@ export default function EvidenceDetail() {
                   <Col xs={12} md={6} className="mb-4">
                     <Card border="light" className="shadow-sm h-100">
                       <Card.Body>
-                        <h5 className="mb-3">Artefact summary</h5>
+                        <h2 className="h5 mb-3">Artefact summary</h2>
                         {latestJob ? (
                           <>
                             <p className="mb-2">
@@ -826,7 +826,7 @@ export default function EvidenceDetail() {
                   <Col xs={12} md={6}>
                     <Card border="light" className="shadow-sm h-100">
                       <Card.Body className="d-flex flex-column justify-content-center">
-                        <h5 className="mb-3">Actions</h5>
+                        <h2 className="h5 mb-3">Actions</h2>
                         {analysisPerm.canCreate ? (
                           <Button
                             variant="primary"

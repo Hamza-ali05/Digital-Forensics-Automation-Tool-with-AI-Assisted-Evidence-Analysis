@@ -48,14 +48,14 @@ export default function StatCard({
     if (n > 0) {
       trendNode = (
         <span className="text-success small fw-bold">
-          <FontAwesomeIcon icon={faArrowUp} className="me-1" />
+          <FontAwesomeIcon icon={faArrowUp} className="me-1" aria-hidden="true" />
           {n}%
         </span>
       );
     } else if (n < 0) {
       trendNode = (
         <span className="text-danger small fw-bold">
-          <FontAwesomeIcon icon={faArrowDown} className="me-1" />
+          <FontAwesomeIcon icon={faArrowDown} className="me-1" aria-hidden="true" />
           {Math.abs(n)}%
         </span>
       );
@@ -67,16 +67,16 @@ export default function StatCard({
   const body = (
     <Card.Body className="d-flex align-items-center justify-content-between">
       <div>
-        <h6 className="text-muted mb-1 text-uppercase small fw-bold">{title}</h6>
-        <h3 className="mb-0 fw-bold">{displayValue}</h3>
+        <p className="text-muted mb-1 text-uppercase small fw-bold">{title}</p>
+        <p className="mb-0 fw-bold h3">{displayValue}</p>
         {trendNode ? <div className="mt-2">{trendNode}</div> : null}
       </div>
       <div className={`icon-shape icon-shape-sm rounded ${colourClass}`}>
-        <FontAwesomeIcon icon={icon} />
+        <FontAwesomeIcon icon={icon} aria-hidden="true" />
       </div>
       {linkTo ? (
         <span className="position-absolute bottom-0 end-0 p-2 text-muted small">
-          <FontAwesomeIcon icon={faArrowRight} />
+          <FontAwesomeIcon icon={faArrowRight} aria-hidden="true" />
         </span>
       ) : null}
     </Card.Body>
@@ -96,7 +96,11 @@ export default function StatCard({
 
   if (linkTo) {
     return (
-      <Link to={linkTo} className="text-decoration-none text-reset d-block h-100">
+      <Link
+        to={linkTo}
+        className="text-decoration-none text-reset d-block h-100"
+        aria-label={`${title}: ${displayValue}`}
+      >
         {card}
       </Link>
     );

@@ -21,6 +21,19 @@ from dfat.services.evidence_management_service import EvidenceManagementService
 
 logger = logging.getLogger(__name__)
 
+_PROCESSING_STATUSES = frozenset(
+    {
+        EvidenceStatus.PROCESSING,
+        EvidenceStatus.PROCESSING.value,
+        str(EvidenceStatus.PROCESSING.value),
+    }
+)
+
+
+def _is_processing_status(value: Any) -> bool:
+    """Return whether ``value`` already represents PROCESSING."""
+    return value in _PROCESSING_STATUSES or str(value) == EvidenceStatus.PROCESSING.value
+
 
 class AcquisitionStage(IPipelineStage):
     """Load, verify, and open evidence for downstream parsing stages."""
@@ -99,9 +112,8 @@ class AcquisitionStage(IPipelineStage):
         )
 
         try:
-            # 1. Load evidence metadata
-            detail = await self._evidence_mgmt.get_evidence_detail(evidence_id)
-            evidence = detail["evidence"]
+            # 1. Load evidence domain object for the forensic loader
+            evidence = await self._evidence_mgmt.get_registered_evidence(evidence_id)
 
             # 2. Verify integrity (also records ACCESSED when verification passes)
             verification = await self._evidence_mgmt.verify_evidence(
@@ -212,9 +224,22 @@ class AcquisitionStage(IPipelineStage):
                 reason="Pipeline acquisition stage started processing",
             )
         except InvalidEvidenceTransitionError as exc:
-            detail = await self._evidence_mgmt.get_evidence_detail(evidence_id)
-            current = detail.get("status")
-            if current == EvidenceStatus.PROCESSING.value or current == EvidenceStatus.PROCESSING:
+            current = getattr(exc, "current_status", None)
+            if _is_processing_status(current):
+                logger.info(
+                    "Evidence %s already in PROCESSING; continuing acquisition",
+                    evidence_id,
+                )
+                return
+            detail: dict[str, Any] = {}
+            try:
+                loaded_detail = await self._evidence_mgmt.get_evidence_detail(evidence_id)
+                if isinstance(loaded_detail, dict):
+                    detail = loaded_detail
+            except Exception:  # noqa: BLE001 — best-effort status lookup
+                detail = {}
+            current = detail.get("status", current)
+            if _is_processing_status(current):
                 logger.info(
                     "Evidence %s already in PROCESSING; continuing acquisition",
                     evidence_id,

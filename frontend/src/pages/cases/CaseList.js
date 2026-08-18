@@ -338,8 +338,11 @@ export default function CaseList() {
           <Row className="g-3 align-items-end">
             <Col xs={12} md={3}>
               <Form.Group className="mb-0">
-                <Form.Label className="small text-muted mb-1">Status</Form.Label>
+                <Form.Label htmlFor="case-status-filter" className="small text-muted mb-1">
+                  Status
+                </Form.Label>
                 <Form.Select
+                  id="case-status-filter"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   aria-label="Filter by status"
@@ -353,8 +356,11 @@ export default function CaseList() {
               </Form.Group>
             </Col>
             <Col xs={12} md={4}>
-              <Form.Label className="small text-muted mb-1">Search</Form.Label>
+              <Form.Label htmlFor="case-search" className="small text-muted mb-1">
+                Search
+              </Form.Label>
               <SearchInput
+                id="case-search"
                 placeholder="Search by case name…"
                 value={search}
                 onChange={setSearch}
@@ -362,28 +368,36 @@ export default function CaseList() {
             </Col>
             <Col xs={6} md={2}>
               <Form.Group className="mb-0">
-                <Form.Label className="small text-muted mb-1">From</Form.Label>
+                <Form.Label htmlFor="case-date-from" className="small text-muted mb-1">
+                  From
+                </Form.Label>
                 <Datetime
                   value={dateFrom}
                   onChange={(value) => setDateFrom(toMoment(value))}
                   timeFormat={false}
                   inputProps={{
+                    id: "case-date-from",
                     placeholder: "Start date",
                     className: "form-control",
+                    "aria-label": "Filter from date",
                   }}
                 />
               </Form.Group>
             </Col>
             <Col xs={6} md={2}>
               <Form.Group className="mb-0">
-                <Form.Label className="small text-muted mb-1">To</Form.Label>
+                <Form.Label htmlFor="case-date-to" className="small text-muted mb-1">
+                  To
+                </Form.Label>
                 <Datetime
                   value={dateTo}
                   onChange={(value) => setDateTo(toMoment(value))}
                   timeFormat={false}
                   inputProps={{
+                    id: "case-date-to",
                     placeholder: "End date",
                     className: "form-control",
+                    "aria-label": "Filter to date",
                   }}
                 />
               </Form.Group>
@@ -420,6 +434,7 @@ export default function CaseList() {
             columns={columns}
             data={data}
             loading={loading}
+            caption="Investigation cases"
             sortable
             emptyMessage="No cases found. Create your first case to begin an investigation."
             pagination={{ page, pageSize, total }}

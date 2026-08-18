@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import time
 from typing import Optional
 
@@ -20,6 +22,8 @@ from dfat.pipeline.parser_registry import ParserRegistry
 from dfat.pipeline.progress_tracker import ProgressNotFoundError, ProgressTracker
 from dfat.pipeline.stage_interface import IPipelineStage, PipelineContext
 from dfat.services.audit_service import AuditService
+
+logger = logging.getLogger(__name__)
 
 
 class ParsingStage(IPipelineStage):
@@ -89,6 +93,35 @@ class ParsingStage(IPipelineStage):
                 success=False,
                 duration_seconds=time.perf_counter() - started,
                 errors=["No evidence available for parsing"],
+            )
+
+        # E2E soft-acquire: skip real parsers and continue with an empty artefact set.
+        if os.environ.get("DFAT_E2E_SOFT_ACQUIRE") == "1":
+            logger.warning(
+                "Soft-acquire enabled; skipping parsers for evidence %s",
+                evidence.evidence_id,
+            )
+            empty = ArtefactSet(evidence_id=evidence.evidence_id, artefacts=[])
+            context.artefact_set = empty
+            job_id = context.job.job_id
+            self._ensure_progress_job(job_id)
+            self._progress.start_stage(job_id, self.stage_name, parser_count=0)
+            duration = time.perf_counter() - started
+            context.stage_timings[self.stage_name.value] = duration
+            self._progress.complete_stage(job_id, self.stage_name, artefacts_found=0)
+            await self._audit.log_action(
+                stage=self.stage_name,
+                action="PARSING_STAGE_COMPLETED",
+                evidence_id=evidence.evidence_id,
+                user_id=context.job.user_id,
+                details={"job_id": job_id, "soft_acquire_skip": True},
+            )
+            return StageResult(
+                stage=self.stage_name,
+                success=True,
+                duration_seconds=duration,
+                output_data={"artefact_count": 0, "soft_acquire_skip": True},
+                errors=[],
             )
 
         job_id = context.job.job_id

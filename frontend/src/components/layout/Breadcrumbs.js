@@ -20,6 +20,8 @@ const SEGMENT_LABELS = {
   usability: "Usability",
   settings: "Settings",
   users: "User Management",
+  audit: "Audit Logs",
+  help: "Help",
   profile: "Profile",
   auth: "Auth",
   login: "Login",
@@ -76,6 +78,7 @@ export default function Breadcrumbs({ compact = false }) {
 
   return (
     <Breadcrumb
+      label="Toolbar breadcrumb"
       listProps={{
         className: compact
           ? "breadcrumb-dark breadcrumb-transparent mb-0 py-1"

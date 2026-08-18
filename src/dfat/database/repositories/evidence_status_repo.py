@@ -132,6 +132,57 @@ class EvidenceStatusRepository:
                     context={"status": status.value, "error": str(exc)},
                 ) from exc
 
+    async def get_current_statuses(
+        self,
+        evidence_ids: list[str],
+    ) -> dict[str, EvidenceStatus]:
+        """Batch-load the current status for many evidence identifiers.
+
+        Prefers the latest history row per evidence ID and falls back to
+        ``evidence_records.status`` when no history exists.
+
+        Args:
+            evidence_ids: Evidence identifiers to resolve.
+
+        Returns:
+            Mapping of evidence ID to current status. IDs with neither history
+            nor a stored status are omitted.
+        """
+        unique_ids = list(dict.fromkeys(evidence_ids))
+        if not unique_ids:
+            return {}
+        async with self._session_factory() as session:
+            try:
+                result = await session.execute(
+                    select(EvidenceStatusHistoryORM)
+                    .where(EvidenceStatusHistoryORM.evidence_id.in_(unique_ids))
+                    .order_by(
+                        EvidenceStatusHistoryORM.evidence_id,
+                        EvidenceStatusHistoryORM.changed_at.desc(),
+                        EvidenceStatusHistoryORM.id.desc(),
+                    )
+                )
+                latest: dict[str, EvidenceStatus] = {}
+                for row in result.scalars().all():
+                    if row.evidence_id not in latest:
+                        latest[row.evidence_id] = EvidenceStatus(row.new_status)
+                missing = [eid for eid in unique_ids if eid not in latest]
+                if missing:
+                    evidence_result = await session.execute(
+                        select(EvidenceRecordORM.id, EvidenceRecordORM.status).where(
+                            EvidenceRecordORM.id.in_(missing)
+                        )
+                    )
+                    for evidence_id, status_value in evidence_result.all():
+                        if status_value:
+                            latest[str(evidence_id)] = EvidenceStatus(status_value)
+                return latest
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to batch-read current evidence statuses",
+                    context={"evidence_ids": unique_ids, "error": str(exc)},
+                ) from exc
+
 
 class EvidenceMetadataRepository:
     """Evidence metadata and multi-algorithm hash persistence."""
@@ -210,6 +261,38 @@ class EvidenceMetadataRepository:
                     context={"evidence_id": evidence_id, "error": str(exc)},
                 ) from exc
             return evidence_metadata_orm_to_domain(orm) if orm is not None else None
+
+    async def get_by_evidence_ids(
+        self,
+        evidence_ids: list[str],
+    ) -> dict[str, EvidenceMetadataRecord]:
+        """Batch-load metadata records keyed by evidence identifier.
+
+        Args:
+            evidence_ids: Evidence identifiers to load.
+
+        Returns:
+            Mapping of evidence ID to metadata. Missing IDs are omitted.
+        """
+        unique_ids = list(dict.fromkeys(evidence_ids))
+        if not unique_ids:
+            return {}
+        async with self._session_factory() as session:
+            try:
+                result = await session.execute(
+                    select(EvidenceMetadataORM).where(
+                        EvidenceMetadataORM.evidence_id.in_(unique_ids)
+                    )
+                )
+                rows = result.scalars().all()
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to batch-load evidence metadata",
+                    context={"evidence_ids": unique_ids, "error": str(exc)},
+                ) from exc
+            return {
+                row.evidence_id: evidence_metadata_orm_to_domain(row) for row in rows
+            }
 
     async def get_by_mime_type(
         self,

@@ -239,6 +239,14 @@ class LocalLLMClient(IArtefactAnalyzer):
         )
         return formatted.full_text
 
+    async def warm_response_cache(self) -> int:
+        """Prime the response cache with common forensic prompt patterns."""
+        return await self._cache.warm_common_patterns(
+            model=self._config.model,
+            temperature=self._config.temperature,
+            generate=self._ollama.generate,
+        )
+
     async def explain(self, artefact: RankedArtefact) -> ArtefactExplanation:
         """Delegate per-artefact explanation to ``ArtefactExplainer``."""
         explainer = self._ensure_explainer()

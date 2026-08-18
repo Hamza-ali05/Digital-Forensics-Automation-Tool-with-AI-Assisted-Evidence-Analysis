@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
+from dfat.ai_engine.optimization import PromptOptimizer
 from dfat.ai_engine.preprocessing.serializer import ArtefactSerializer
 from dfat.ai_engine.preprocessing.truncator import TokenTruncator
 from dfat.core.enums import SuspicionLevel
@@ -23,6 +24,7 @@ class SummarizationPromptBuilder:
         templates: ForensicPromptTemplates | None = None,
         serializer: ArtefactSerializer | None = None,
         truncator: TokenTruncator | None = None,
+        optimizer: PromptOptimizer | None = None,
         max_tokens: int = 6000,
     ) -> None:
         """Initialise the summarization prompt builder.
@@ -31,11 +33,14 @@ class SummarizationPromptBuilder:
             templates: Versioned forensic prompt templates.
             serializer: Artefact serializer for HIGH+ detail blocks.
             truncator: Token-aware truncator for prompt budgets.
+            optimizer: Context-window optimizer that prefers HIGH/CRITICAL.
             max_tokens: Truncator max token window.
         """
         self._templates = templates or ForensicPromptTemplates()
         self._serializer = serializer or ArtefactSerializer()
         self._truncator = truncator or TokenTruncator(max_tokens=max_tokens)
+        self._optimizer = optimizer or PromptOptimizer(truncator=self._truncator)
+        self._max_tokens = max(1, max_tokens)
 
     def build_summary_prompt(
         self,
@@ -103,7 +108,7 @@ class SummarizationPromptBuilder:
             high_count=high_count,
             categories=", ".join(categories) if categories else "none",
         )
-        return self._truncator.truncate(prompt, reserve_tokens=2000)
+        return self._optimizer.optimize_for_context_window(prompt, self._max_tokens)
 
     @staticmethod
     def _timeline_range(

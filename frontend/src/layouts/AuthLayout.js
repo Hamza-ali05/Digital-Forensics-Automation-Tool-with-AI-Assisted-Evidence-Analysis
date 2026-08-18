@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Container } from "@themesberg/react-bootstrap";
 
 import LoadingSpinner from "components/common/LoadingSpinner";
+import SkipToContent from "components/common/SkipToContent";
 import config from "config";
 
 /**
@@ -18,8 +19,9 @@ export default function AuthLayout({ children }) {
 
   return (
     <>
+      <SkipToContent />
       <LoadingSpinner show={!loaded} />
-      <main className="dfat-auth-layout">
+      <main id="main-content" className="dfat-auth-layout" tabIndex={-1}>
         <Container className="pt-4 pt-lg-5 text-center">
           <div className="dfat-auth-brand">
             <span className="fw-bold fs-2 text-primary d-block">{config.appName}</span>

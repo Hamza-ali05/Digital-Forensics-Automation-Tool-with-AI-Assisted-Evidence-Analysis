@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
+from dfat.api.schemas.base import APIModel
+
 
 class LoginRequest(BaseModel):
     """Credentials for investigator login."""
@@ -15,7 +17,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class TokenResponse(BaseModel):
+class TokenResponse(APIModel):
     """Bearer token pair returned after successful authentication."""
 
     access_token: str
@@ -40,7 +42,7 @@ class RegisterRequest(BaseModel):
     role_name: str = "analyst"
 
 
-class UserResponse(BaseModel):
+class UserResponse(APIModel):
     """Public user profile response."""
 
     id: str

@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Optional
 
-from dfat.case_management.enums import CASE_STATUS_TRANSITIONS, CaseStatus, CustodyAction
+from dfat.auth.exceptions import InsufficientPermissionsError
+from dfat.case_management.enums import (
+    CASE_STATUS_TRANSITIONS,
+    CaseStatus,
+    CustodyAction,
+)
 from dfat.case_management.exceptions import (
     CaseAlreadyClosedError,
     CaseError,
@@ -180,18 +185,63 @@ class CaseService:
         )
         return updated
 
-    async def get_case(self, case_id: str) -> Case:
-        """Return a case by identifier."""
+    async def get_case(self, case_id: str, requester: Optional[UserORM] = None) -> Case:
+        """Return a case by identifier, optionally enforcing visibility."""
+        if requester is not None:
+            return await self.ensure_access(case_id, requester)
         return await self._require_case(case_id)
 
     async def list_cases(
         self,
         status: Optional[CaseStatus] = None,
+        search: Optional[str] = None,
+        *,
+        requester: Optional[UserORM] = None,
     ) -> list[Case]:
-        """List all cases, optionally filtered by status."""
-        if status is not None:
-            return await self._case_repo.get_by_status(status)
-        return await self._case_repo.list_all()
+        """List cases visible to ``requester`` (admins see all)."""
+        is_admin = requester is not None and self._is_admin(requester)
+        if requester is None or is_admin:
+            cases = await self._case_repo.search(status=status, search=search)
+        else:
+            cases = await self._case_repo.list_visible(
+                requester.id,
+                status=status,
+                search=search,
+            )
+        return cases
+
+    async def ensure_access(self, case_id: str, user: UserORM) -> Case:
+        """Return the case when ``user`` may access it.
+
+        Raises:
+            CaseNotFoundError: If the case does not exist.
+            InsufficientPermissionsError: If the user cannot see the case.
+        """
+        case = await self._require_case(case_id)
+        if self._is_admin(user):
+            return case
+        if await self._case_repo.is_visible_to(case_id, user.id):
+            return case
+        role_name = self._role_name(user)
+        raise InsufficientPermissionsError(
+            required_permission="cases:read",
+            user_role=role_name,
+            context={"case_id": case_id},
+        )
+
+    @staticmethod
+    def _role_name(user: UserORM) -> str:
+        role = getattr(user, "role", None)
+        if role is not None and getattr(role, "name", None):
+            return str(role.name)
+        role_id = str(user.role_id)
+        if role_id.startswith("role-"):
+            return role_id.removeprefix("role-")
+        return role_id
+
+    @staticmethod
+    def _is_admin(user: UserORM) -> bool:
+        return CaseService._role_name(user) == "admin"
 
     async def get_my_cases(self, user_id: str) -> list[Case]:
         """List cases where the user is an active investigator."""

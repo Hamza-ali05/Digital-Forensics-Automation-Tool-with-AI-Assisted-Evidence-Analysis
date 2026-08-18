@@ -18,6 +18,7 @@ import { AUTH_CONFIG } from "config/auth.config";
 import useAuth from "hooks/useAuth";
 import useLocalStorage from "hooks/useLocalStorage";
 import useNotification from "hooks/useNotification";
+import usePageTitle from "hooks/usePageTitle";
 import { validateRequired } from "utils/validators";
 import { Routes } from "routes";
 import BgImage from "../../assets/img/illustrations/signin.svg";
@@ -38,6 +39,7 @@ function formatLockoutRemaining(lockedUntil) {
  * DFAT login — username/password against OAuth2 token endpoint.
  */
 export default function Login() {
+  usePageTitle("Sign in");
   const history = useHistory();
   const { login } = useAuth();
   const { error: notifyError } = useNotification();
@@ -103,7 +105,7 @@ export default function Login() {
           <Col xs={12} className="d-flex align-items-center justify-content-center">
             <div className="bg-white shadow-soft border rounded border-light p-4 p-lg-5 w-100 fmxw-500">
               <div className="text-center text-md-center mb-4 mt-md-0">
-                <h3 className="mb-0">Sign in to DFAT</h3>
+                <h1 className="h3 mb-0">Sign in to DFAT</h1>
                 <p className="text-gray mb-0">Digital Forensics Automation Tool</p>
               </div>
 
@@ -115,12 +117,13 @@ export default function Login() {
 
               <Form className="mt-3" onSubmit={handleSubmit} noValidate>
                 <Form.Group id="username" className="mb-4">
-                  <Form.Label>Username</Form.Label>
+                  <Form.Label htmlFor="login-username">Username</Form.Label>
                   <InputGroup>
-                    <InputGroup.Text>
-                      <FontAwesomeIcon icon={faUser} />
+                    <InputGroup.Text aria-hidden="true">
+                      <FontAwesomeIcon icon={faUser} aria-hidden="true" />
                     </InputGroup.Text>
                     <Form.Control
+                      id="login-username"
                       autoFocus
                       required
                       type="text"
@@ -138,12 +141,13 @@ export default function Login() {
                 </Form.Group>
 
                 <Form.Group id="password" className="mb-4">
-                  <Form.Label>Password</Form.Label>
+                  <Form.Label htmlFor="login-password">Password</Form.Label>
                   <InputGroup>
-                    <InputGroup.Text>
-                      <FontAwesomeIcon icon={faUnlockAlt} />
+                    <InputGroup.Text aria-hidden="true">
+                      <FontAwesomeIcon icon={faUnlockAlt} aria-hidden="true" />
                     </InputGroup.Text>
                     <Form.Control
+                      id="login-password"
                       required
                       type="password"
                       placeholder="Password"
@@ -188,7 +192,9 @@ export default function Login() {
                         size="sm"
                         role="status"
                         className="me-2"
-                      />
+                      >
+                        <span className="visually-hidden">Signing in</span>
+                      </Spinner>
                       Signing in…
                     </>
                   ) : (

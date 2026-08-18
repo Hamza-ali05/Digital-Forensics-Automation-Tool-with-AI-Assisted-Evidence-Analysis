@@ -83,7 +83,7 @@ export default function Topbar({ onToggleSidebar }) {
   };
 
   return (
-    <Navbar variant="dark" expanded className="ps-0 pe-2 pb-0">
+    <Navbar variant="dark" expanded className="ps-0 pe-2 pb-0" aria-label="Toolbar">
       <Container fluid className="px-0">
         <div className="d-flex justify-content-between w-100 align-items-center">
           <div className="d-flex align-items-center flex-grow-1 min-w-0">
@@ -93,7 +93,7 @@ export default function Topbar({ onToggleSidebar }) {
               onClick={onToggleSidebar}
               aria-label="Toggle navigation"
             >
-              <FontAwesomeIcon icon={faBars} />
+              <FontAwesomeIcon icon={faBars} aria-hidden="true" />
             </Button>
             <div className="flex-grow-1 min-w-0 d-none d-sm-block">
               <Breadcrumbs compact />
@@ -132,9 +132,13 @@ export default function Topbar({ onToggleSidebar }) {
             </Nav.Item>
 
             <Dropdown as={Nav.Item} className="me-2">
-              <Dropdown.Toggle as={Nav.Link} className="text-dark px-2 pt-1">
+              <Dropdown.Toggle
+                as={Nav.Link}
+                className="text-dark px-2 pt-1"
+                aria-label="Notifications"
+              >
                 <span className="icon icon-sm position-relative">
-                  <FontAwesomeIcon icon={faBell} />
+                  <FontAwesomeIcon icon={faBell} aria-hidden="true" />
                   {unread > 0 ? (
                     <Badge
                       bg="danger"
@@ -172,10 +176,14 @@ export default function Topbar({ onToggleSidebar }) {
             </Dropdown>
 
             <Dropdown as={Nav.Item}>
-              <Dropdown.Toggle as={Nav.Link} className="pt-1 px-0">
+              <Dropdown.Toggle
+                as={Nav.Link}
+                className="pt-1 px-0"
+                aria-label={`User menu for ${user?.username || "user"}`}
+              >
                 <div className="media d-flex align-items-center">
                   <span className="icon icon-sm text-gray-600">
-                    <FontAwesomeIcon icon={faUserCircle} size="2x" />
+                    <FontAwesomeIcon icon={faUserCircle} size="2x" aria-hidden="true" />
                   </span>
                   <div className="media-body ms-2 text-dark align-items-center d-none d-lg-block">
                     <span className="mb-0 font-small fw-bold">

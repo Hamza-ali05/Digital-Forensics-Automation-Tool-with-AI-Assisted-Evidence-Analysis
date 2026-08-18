@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -95,12 +95,92 @@ class SQLAlchemyCaseRepository(ICaseRepository):
                     select(CaseORM).options(selectinload(CaseORM.investigators))
                 )
                 rows = list(result.scalars().unique().all())
-                return [
-                    await self._to_domain(session, row) for row in rows
-                ]
+                return await self._to_domain_many(session, rows)
             except SQLAlchemyError as exc:
                 raise DatabaseError(
                     "Failed to list cases",
+                    context={"error": str(exc)},
+                ) from exc
+
+    async def is_visible_to(self, case_id: str, user_id: str) -> bool:
+        """Return True when ``user_id`` created or is assigned to the case."""
+        async with self._session_factory() as session:
+            try:
+                assigned = exists(
+                    select(1).where(
+                        CaseInvestigatorORM.case_id == CaseORM.id,
+                        CaseInvestigatorORM.user_id == user_id,
+                        CaseInvestigatorORM.is_active.is_(True),
+                    )
+                )
+                result = await session.execute(
+                    select(CaseORM.id).where(
+                        CaseORM.id == case_id,
+                        or_(CaseORM.created_by_user_id == user_id, assigned),
+                    )
+                )
+                return result.scalar_one_or_none() is not None
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to check case visibility",
+                    context={"case_id": case_id, "user_id": user_id, "error": str(exc)},
+                ) from exc
+
+    async def list_visible(
+        self,
+        user_id: str,
+        *,
+        status: Optional[CaseStatus] = None,
+        search: Optional[str] = None,
+    ) -> list[Case]:
+        """List cases visible to ``user_id``, with optional filters."""
+        async with self._session_factory() as session:
+            try:
+                assigned = exists(
+                    select(1).where(
+                        CaseInvestigatorORM.case_id == CaseORM.id,
+                        CaseInvestigatorORM.user_id == user_id,
+                        CaseInvestigatorORM.is_active.is_(True),
+                    )
+                )
+                stmt = (
+                    select(CaseORM)
+                    .options(selectinload(CaseORM.investigators))
+                    .where(or_(CaseORM.created_by_user_id == user_id, assigned))
+                )
+                if status is not None:
+                    stmt = stmt.where(CaseORM.status == status.value)
+                if search:
+                    stmt = stmt.where(CaseORM.case_name.contains(search))
+                result = await session.execute(stmt)
+                rows = list(result.scalars().unique().all())
+                return await self._to_domain_many(session, rows)
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to list visible cases",
+                    context={"user_id": user_id, "error": str(exc)},
+                ) from exc
+
+    async def search(
+        self,
+        *,
+        status: Optional[CaseStatus] = None,
+        search: Optional[str] = None,
+    ) -> list[Case]:
+        """List all cases with optional status and name search (parameterized)."""
+        async with self._session_factory() as session:
+            try:
+                stmt = select(CaseORM).options(selectinload(CaseORM.investigators))
+                if status is not None:
+                    stmt = stmt.where(CaseORM.status == status.value)
+                if search:
+                    stmt = stmt.where(CaseORM.case_name.contains(search))
+                result = await session.execute(stmt)
+                rows = list(result.scalars().unique().all())
+                return await self._to_domain_many(session, rows)
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to search cases",
                     context={"error": str(exc)},
                 ) from exc
 
@@ -131,7 +211,7 @@ class SQLAlchemyCaseRepository(ICaseRepository):
                     .where(CaseORM.status == status.value)
                 )
                 rows = list(result.scalars().unique().all())
-                return [await self._to_domain(session, row) for row in rows]
+                return await self._to_domain_many(session, rows)
             except SQLAlchemyError as exc:
                 raise DatabaseError(
                     "Failed to list cases by status",
@@ -152,7 +232,7 @@ class SQLAlchemyCaseRepository(ICaseRepository):
                     )
                 )
                 rows = list(result.scalars().unique().all())
-                return [await self._to_domain(session, row) for row in rows]
+                return await self._to_domain_many(session, rows)
             except SQLAlchemyError as exc:
                 raise DatabaseError(
                     "Failed to list cases by investigator",
@@ -377,29 +457,56 @@ class SQLAlchemyCaseRepository(ICaseRepository):
         orm = result.scalar_one_or_none()
         if orm is None:
             return None
-        return await self._to_domain(session, orm)
+        mapped = await self._to_domain_many(session, [orm])
+        return mapped[0] if mapped else None
 
-    async def _to_domain(self, session: AsyncSession, orm: CaseORM) -> Case:
-        """Map ORM case to domain including user names and evidence IDs."""
-        user_ids = [inv.user_id for inv in orm.investigators if inv.is_active]
-        if orm.lead_investigator_id:
-            user_ids.append(orm.lead_investigator_id)
+    async def _to_domain_many(
+        self,
+        session: AsyncSession,
+        orms: list[CaseORM],
+    ) -> list[Case]:
+        """Map ORM cases in batch to avoid N+1 user and evidence queries."""
+        if not orms:
+            return []
+        user_ids: set[str] = set()
+        case_ids = [orm.id for orm in orms]
+        for orm in orms:
+            for investigator in orm.investigators:
+                if investigator.is_active:
+                    user_ids.add(investigator.user_id)
+            if orm.lead_investigator_id:
+                user_ids.add(orm.lead_investigator_id)
+
         name_map: dict[str, tuple[str, str]] = {}
         if user_ids:
             users = await session.execute(
-                select(UserORM).where(UserORM.id.in_(set(user_ids)))
+                select(UserORM).where(UserORM.id.in_(user_ids))
             )
             for user in users.scalars().all():
                 name_map[user.id] = (user.username, user.full_name)
+
+        evidence_by_case: dict[str, list[str]] = {case_id: [] for case_id in case_ids}
         evidence_result = await session.execute(
-            select(EvidenceRecordORM.id).where(EvidenceRecordORM.case_id == orm.id)
+            select(EvidenceRecordORM.id, EvidenceRecordORM.case_id).where(
+                EvidenceRecordORM.case_id.in_(case_ids)
+            )
         )
-        evidence_ids = [str(row[0]) for row in evidence_result.all()]
-        return case_orm_to_domain(
-            orm,
-            evidence_ids=evidence_ids,
-            investigator_usernames=name_map,
-        )
+        for evidence_id, case_id in evidence_result.all():
+            evidence_by_case.setdefault(str(case_id), []).append(str(evidence_id))
+
+        return [
+            case_orm_to_domain(
+                orm,
+                evidence_ids=evidence_by_case.get(orm.id, []),
+                investigator_usernames=name_map,
+            )
+            for orm in orms
+        ]
+
+    async def _to_domain(self, session: AsyncSession, orm: CaseORM) -> Case:
+        """Map a single ORM case to domain including user names and evidence IDs."""
+        mapped = await self._to_domain_many(session, [orm])
+        return mapped[0]
 
     async def _upsert_investigator(
         self,

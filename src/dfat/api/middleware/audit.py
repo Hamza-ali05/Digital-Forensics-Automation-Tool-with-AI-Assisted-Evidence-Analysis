@@ -25,6 +25,14 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
         super().__init__(app)  # type: ignore[arg-type]
         self._audit_logger = audit_logger
 
+    def _resolve_logger(self, request: Request) -> ForensicAuditLogger:
+        """Use the container logger when present so test/runtime overrides apply."""
+        try:
+            container = request.app.state.container
+            return container.logging.forensic_audit_logger()
+        except Exception:  # noqa: BLE001 — fall back to the constructor instance
+            return self._audit_logger
+
     def _extract_user_id(self, request: Request) -> Optional[str]:
         """Best-effort extract of authenticated user ID from a Bearer JWT."""
         auth = request.headers.get("Authorization")
@@ -63,7 +71,7 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
         )
         request_id = getattr(request.state, "request_id", None)
         user_id = self._extract_user_id(request)
-        self._audit_logger.log_action(
+        self._resolve_logger(request).log_action(
             stage=PipelineStage.REPORTING,
             action="API_REQUEST",
             evidence_id="api",

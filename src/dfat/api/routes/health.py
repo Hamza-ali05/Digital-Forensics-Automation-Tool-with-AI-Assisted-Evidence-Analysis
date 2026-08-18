@@ -6,24 +6,33 @@ import platform
 import sys
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy import text
 
 from dfat import __version__
 from dfat.api.dependencies import require_role
+from dfat.api.schemas.base import APIModel
 from dfat.database.models.user import UserORM
+from dfat.monitoring.health_aggregator import AggregatedHealth, HealthAggregator
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
 _PROCESS_STARTED_AT = time.monotonic()
-_PROCESS_STARTED_WALL = datetime.now(UTC)
+
+_TABLE_COUNT_QUERIES = {
+    "users": text("SELECT COUNT(*) FROM users"),
+    "roles": text("SELECT COUNT(*) FROM roles"),
+    "evidence_records": text("SELECT COUNT(*) FROM evidence_records"),
+    "artefact_records": text("SELECT COUNT(*) FROM artefact_records"),
+    "report_records": text("SELECT COUNT(*) FROM report_records"),
+    "audit_log": text("SELECT COUNT(*) FROM audit_log"),
+}
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(APIModel):
     """Basic liveness response."""
 
     status: str = "healthy"
@@ -31,7 +40,7 @@ class HealthResponse(BaseModel):
     timestamp: datetime
 
 
-class ReadinessResponse(BaseModel):
+class ReadinessResponse(APIModel):
     """Readiness probe with component checks."""
 
     status: str
@@ -39,7 +48,7 @@ class ReadinessResponse(BaseModel):
     timestamp: datetime
 
 
-class DetailedHealthResponse(BaseModel):
+class DetailedHealthResponse(APIModel):
     """Admin-only detailed system information."""
 
     status: str
@@ -58,43 +67,9 @@ def _container(request: Request):  # type: ignore[no-untyped-def]
     return request.app.state.container
 
 
-async def _check_database(request: Request) -> bool:
-    """Return whether the database accepts a simple query."""
-    try:
-        engine = _container(request).database.database_engine()
-        return await engine.check_connection()
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _check_llm(request: Request) -> bool:
-    """Return whether the local LLM client reports availability (optional)."""
-    try:
-        client = _container(request).ai_engine.llm_client()
-        return bool(client.is_available())
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _check_storage(request: Request) -> bool:
-    """Return whether the configured evidence directory is accessible."""
-    try:
-        settings = _container(request).settings()
-        evidence_dir = Path(settings.evidence.evidence_dir)
-        if not evidence_dir.exists():
-            evidence_dir.mkdir(parents=True, exist_ok=True)
-        return evidence_dir.is_dir() and evidence_dir.exists()
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _readiness_status(checks: dict[str, bool]) -> str:
-    """Derive overall readiness from component checks."""
-    if checks.get("database") and checks.get("storage"):
-        if checks.get("llm"):
-            return "ready"
-        return "degraded"
-    return "unavailable"
+async def _aggregated_health(request: Request) -> AggregatedHealth:
+    """Run the monitoring aggregator against the request DI container."""
+    return await HealthAggregator.from_container(_container(request)).collect()
 
 
 @router.get("", response_model=HealthResponse)
@@ -109,15 +84,11 @@ async def health() -> HealthResponse:
 
 @router.get("/ready", response_model=ReadinessResponse)
 async def readiness(request: Request) -> ReadinessResponse:
-    """Readiness check for database, optional LLM, and evidence storage."""
-    checks = {
-        "database": await _check_database(request),
-        "llm": _check_llm(request),
-        "storage": _check_storage(request),
-    }
+    """Readiness check aggregating database, AI, storage, pipeline, and audit."""
+    snapshot = await _aggregated_health(request)
     return ReadinessResponse(
-        status=_readiness_status(checks),
-        checks=checks,
+        status=snapshot.readiness_status,
+        checks=snapshot.checks,
         timestamp=datetime.now(UTC),
     )
 
@@ -128,11 +99,7 @@ async def detailed_health(
     _: UserORM = Depends(require_role(["admin"])),
 ) -> DetailedHealthResponse:
     """Detailed system diagnostics (admin only)."""
-    checks = {
-        "database": await _check_database(request),
-        "llm": _check_llm(request),
-        "storage": _check_storage(request),
-    }
+    snapshot = await _aggregated_health(request)
     package_versions: dict[str, str] = {"dfat": __version__}
     for package_name in ("fastapi", "sqlalchemy", "pydantic", "uvicorn"):
         try:
@@ -145,18 +112,9 @@ async def detailed_health(
     try:
         engine = _container(request).database.database_engine()
         async with engine.engine.connect() as connection:
-            for table in (
-                "users",
-                "roles",
-                "evidence_records",
-                "artefact_records",
-                "report_records",
-                "audit_log",
-            ):
+            for table, query in _TABLE_COUNT_QUERIES.items():
                 try:
-                    result = await connection.execute(
-                        text(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
-                    )
+                    result = await connection.execute(query)
                     table_counts[table] = int(result.scalar_one())
                 except Exception:  # noqa: BLE001
                     table_counts[table] = -1
@@ -180,7 +138,7 @@ async def detailed_health(
             memory_mb = None
 
     return DetailedHealthResponse(
-        status=_readiness_status(checks),
+        status=snapshot.readiness_status,
         version=__version__,
         timestamp=datetime.now(UTC),
         uptime_seconds=round(time.monotonic() - _PROCESS_STARTED_AT, 2),
@@ -189,5 +147,5 @@ async def detailed_health(
         package_versions=package_versions,
         database_table_counts=table_counts,
         memory_usage_mb=memory_mb,
-        checks=checks,
+        checks=snapshot.checks,
     )

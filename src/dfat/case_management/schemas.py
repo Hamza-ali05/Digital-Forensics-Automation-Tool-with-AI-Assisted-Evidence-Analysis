@@ -7,6 +7,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from dfat.api.schemas.base import APIModel
 from dfat.case_management.enums import CaseStatus
 
 
@@ -44,7 +45,7 @@ class AddEvidenceToCaseRequest(BaseModel):
     evidence_id: str = Field(..., min_length=1)
 
 
-class InvestigatorResponse(BaseModel):
+class InvestigatorResponse(APIModel):
     """Investigator assignment in API responses."""
 
     user_id: str
@@ -54,7 +55,7 @@ class InvestigatorResponse(BaseModel):
     assigned_at: datetime
 
 
-class CaseResponse(BaseModel):
+class CaseResponse(APIModel):
     """Case detail response."""
 
     case_id: str
@@ -75,7 +76,7 @@ class CaseResponse(BaseModel):
     created_at: datetime
 
 
-class CaseSummaryResponse(BaseModel):
+class CaseSummaryResponse(APIModel):
     """Comprehensive case summary response."""
 
     case_id: str
@@ -97,7 +98,7 @@ class CaseSummaryResponse(BaseModel):
     created_at: str
 
 
-class CaseListResponse(BaseModel):
+class CaseListResponse(APIModel):
     """Paginated-style case list wrapper."""
 
     cases: list[CaseResponse]

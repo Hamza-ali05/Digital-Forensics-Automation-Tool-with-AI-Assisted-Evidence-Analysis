@@ -1,1 +1,137 @@
-// DFAT-specific styles (Prompt 7+).
+/* DFAT accessibility and responsive helpers (WCAG 2.1 AA). */
+
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -3.5rem;
+  z-index: 11000;
+  padding: 0.5rem 0.85rem;
+  background: #0d6efd;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.form-control:focus-visible,
+.nav-link:focus-visible,
+.dropdown-item:focus-visible,
+.page-link:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+
+.sidebar-toggle:focus,
+.navbar-toggler:focus {
+  outline: 2px solid #fff !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.35) !important;
+}
+
+/* Meet WCAG AA 4.5:1 on light backgrounds (scoped — do not darken sidebar). */
+.content .text-muted,
+.content .text-gray,
+.content .text-gray-600,
+.content .form-text,
+.dfat-auth-layout .text-muted,
+.dfat-auth-layout .text-gray,
+.dfat-auth-layout .form-text,
+.dfat-minimal-layout .text-muted,
+.dfat-minimal-layout .text-gray,
+.dfat-minimal-layout .form-text,
+.bg-white .text-muted,
+.bg-soft .text-muted {
+  color: #495057 !important;
+}
+
+.sidebar .nav-link:focus-visible {
+  outline: 2px solid #fff !important;
+  outline-offset: 2px;
+}
+
+.sidebar-footer,
+.sidebar-footer .text-white-50 {
+  color: #e9ecef !important;
+}
+
+/* Form text: Volt $gray-700 (#66799e) is 4.38:1 on white — below WCAG AA. */
+.form-control,
+.form-select,
+.form-control:focus,
+.form-select:focus {
+  color: #262b40;
+}
+
+.form-control::placeholder {
+  color: #495057;
+  opacity: 1;
+}
+
+nav[aria-label="breadcrumb"] a {
+  color: #262b40 !important;
+}
+
+nav[aria-label="breadcrumb"] .breadcrumb-item.active {
+  color: #4a5073 !important;
+}
+
+.btn-warning,
+.btn-warning:hover,
+.btn-warning:focus {
+  color: #262b40 !important;
+}
+
+.table-responsive,
+.dfat-data-table,
+.dfat-data-table .table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.dfat-data-table table {
+  min-width: 640px;
+}
+
+@media (max-width: 767.98px) {
+  /* Volt `.sidebar { display:block }` otherwise beats Bootstrap `.collapse`. */
+  .sidebar.collapse:not(.show) {
+    display: none !important;
+  }
+
+  .form-control,
+  .form-select,
+  input.form-control,
+  textarea.form-control,
+  select.form-control {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dfat-auth-layout .form-control,
+  .dfat-auth-layout .input-group {
+    width: 100%;
+  }
+
+  .content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,20 @@
+# DFAT frontend development image (CRA with API proxy)
+FROM node:18-bullseye
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
+
+COPY . .
+
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV REACT_APP_API_BASE_URL=/api/v1
+ENV NODE_OPTIONS=--openssl-legacy-provider
+# Proxy target inside Compose network (see docker-compose.dev.yml)
+ENV DFAT_BACKEND_PROXY_TARGET=http://backend:8000
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

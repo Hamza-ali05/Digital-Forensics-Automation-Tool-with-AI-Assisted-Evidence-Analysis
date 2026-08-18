@@ -183,7 +183,8 @@ class DualOutputReportBuilder(IReportGenerator):
             stage_timings=dict(timings),
             audit_metadata=audit_metadata,
         )
-        self._report_repo.save(report)
+        # Persistence is performed by async callers (ReportingStage) so that
+        # async SQLAlchemy repositories are correctly awaited.
         self._emit_audit(
             action="REPORT_GENERATED",
             evidence_id=json_report.evidence_id,
@@ -197,6 +198,13 @@ class DualOutputReportBuilder(IReportGenerator):
             },
         )
         return report
+
+    async def persist_report(self, report: ForensicReport) -> str:
+        """Persist ``report`` via the configured repository (await-safe)."""
+        result = self._report_repo.save(report)
+        if hasattr(result, "__await__"):
+            return await result  # type: ignore[misc]
+        return str(result)
 
     def build_complete_report(
         self,

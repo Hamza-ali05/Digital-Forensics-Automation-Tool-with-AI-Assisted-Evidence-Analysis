@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
+from dfat.ai_engine.optimization import PromptOptimizer
 from dfat.ai_engine.preprocessing.batcher import ArtefactBatcher
 from dfat.ai_engine.preprocessing.serializer import ArtefactSerializer
 from dfat.core.models.artefact import Artefact
@@ -16,6 +17,8 @@ class ClassificationPromptBuilder:
         templates: ForensicPromptTemplates,
         serializer: ArtefactSerializer,
         batcher: ArtefactBatcher,
+        optimizer: PromptOptimizer | None = None,
+        max_prompt_tokens: int = 6000,
     ) -> None:
         """Initialise the prompt builder.
 
@@ -23,10 +26,14 @@ class ClassificationPromptBuilder:
             templates: Versioned forensic prompt templates.
             serializer: Artefact text serializer.
             batcher: Token-budget artefact batcher.
+            optimizer: Context-window prompt optimizer.
+            max_prompt_tokens: Token budget applied after rendering.
         """
         self._templates = templates
         self._serializer = serializer
         self._batcher = batcher
+        self._optimizer = optimizer or PromptOptimizer()
+        self._max_prompt_tokens = max(1, max_prompt_tokens)
 
     def build_prompt(self, artefacts: list[Artefact]) -> str:
         """Build a single classification prompt for ``artefacts``.
@@ -38,9 +45,13 @@ class ClassificationPromptBuilder:
             Rendered classification prompt string.
         """
         artefact_text = self._serializer.serialize_for_classification(artefacts)
-        return self._templates.render(
+        prompt = self._templates.render(
             "classification",
             artefact_text=artefact_text,
+        )
+        return self._optimizer.optimize_for_context_window(
+            prompt,
+            self._max_prompt_tokens,
         )
 
     def build_batched_prompts(self, artefacts: list[Artefact]) -> list[str]:

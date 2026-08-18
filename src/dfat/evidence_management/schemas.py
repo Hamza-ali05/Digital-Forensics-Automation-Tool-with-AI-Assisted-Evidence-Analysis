@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dfat.api.path_safety import assert_no_path_traversal
+
+from dfat.api.schemas.base import APIModel
 from dfat.case_management.enums import EvidenceStatus
 from dfat.core.enums import EvidenceType
 
@@ -21,6 +24,11 @@ class RegisterEvidenceRequest(BaseModel):
     evidence_type: EvidenceType
     description: Optional[str] = None
 
+    @field_validator("file_path")
+    @classmethod
+    def _reject_traversal(cls, value: str) -> str:
+        return assert_no_path_traversal(value)
+
 
 class QuarantineEvidenceRequest(BaseModel):
     """Request body for quarantining evidence."""
@@ -30,7 +38,7 @@ class QuarantineEvidenceRequest(BaseModel):
     reason: str = Field(..., min_length=1)
 
 
-class EvidenceDetailResponse(BaseModel):
+class EvidenceDetailResponse(APIModel):
     """Comprehensive evidence detail response."""
 
     evidence_id: str
@@ -50,7 +58,7 @@ class EvidenceDetailResponse(BaseModel):
     custody_actions_count: int = 0
 
 
-class EvidenceInventoryItemResponse(BaseModel):
+class EvidenceInventoryItemResponse(APIModel):
     """Single inventory row."""
 
     evidence_id: str
@@ -67,14 +75,14 @@ class EvidenceInventoryItemResponse(BaseModel):
     custody_actions_count: int = 0
 
 
-class EvidenceInventoryResponse(BaseModel):
+class EvidenceInventoryResponse(APIModel):
     """Evidence inventory list response."""
 
     items: list[EvidenceInventoryItemResponse]
     total: int
 
 
-class EvidenceValidationResponse(BaseModel):
+class EvidenceValidationResponse(APIModel):
     """Register/validate workflow or re-validation response."""
 
     evidence_id: Optional[str] = None
@@ -85,7 +93,7 @@ class EvidenceValidationResponse(BaseModel):
     case_id: Optional[str] = None
 
 
-class CustodyChainEntryResponse(BaseModel):
+class CustodyChainEntryResponse(APIModel):
     """Single custody chain entry."""
 
     entry_number: Optional[int] = None
@@ -100,7 +108,7 @@ class CustodyChainEntryResponse(BaseModel):
     notes: Optional[str] = None
 
 
-class CustodyChainResponse(BaseModel):
+class CustodyChainResponse(APIModel):
     """Ordered custody chain for an evidence item."""
 
     evidence_id: str
@@ -108,7 +116,7 @@ class CustodyChainResponse(BaseModel):
     total_entries: int
 
 
-class EvidenceStatusHistoryEntry(BaseModel):
+class EvidenceStatusHistoryEntry(APIModel):
     """Single evidence status history entry."""
 
     previous_status: Optional[str] = None
@@ -118,7 +126,7 @@ class EvidenceStatusHistoryEntry(BaseModel):
     reason: str
 
 
-class EvidenceStatusResponse(BaseModel):
+class EvidenceStatusResponse(APIModel):
     """Current evidence status and history."""
 
     evidence_id: str
@@ -126,7 +134,7 @@ class EvidenceStatusResponse(BaseModel):
     history: list[EvidenceStatusHistoryEntry] = Field(default_factory=list)
 
 
-class IntegrityVerificationResponse(BaseModel):
+class IntegrityVerificationResponse(APIModel):
     """Integrity verification result."""
 
     evidence_id: str
@@ -137,7 +145,7 @@ class IntegrityVerificationResponse(BaseModel):
     custody_record: Optional[dict[str, Any]] = None
 
 
-class EvidenceStatisticsResponse(BaseModel):
+class EvidenceStatisticsResponse(APIModel):
     """Aggregated evidence statistics."""
 
     total: int

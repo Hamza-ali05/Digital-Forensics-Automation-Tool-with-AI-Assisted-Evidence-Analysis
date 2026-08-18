@@ -1,0 +1,68 @@
+# DFAT production stack — backend, nginx frontend, Ollama.
+# Usage:
+#   cp .env.example .env   # set DFAT_AUTH__SECRET_KEY and production CORS
+#   docker compose build
+#   docker compose up -d
+#
+# LLM note: the API accepts only loopback LLM URLs (ADR-017). The Ollama
+# service is included for model storage; enable fallback or run Ollama on the
+# host at 127.0.0.1 when using host-network deployment (see PRODUCTION_CHECKLIST.md).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DFAT_ENV: production
+      DFAT_DATABASE__URL: sqlite+aiosqlite:///./data/dfat.db
+      DFAT_DATABASE__CREATE_TABLES_ON_STARTUP: "false"
+      DFAT_AI_ENGINE__ENABLE_FALLBACK: "true"
+      DFAT_LOGGING__LOG_LEVEL: INFO
+    volumes:
+      - dfat_data:/app/data
+    networks:
+      - dfat_internal
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    networks:
+      - dfat_internal
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    networks:
+      - dfat_internal
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+networks:
+  dfat_internal:
+    driver: bridge
+
+volumes:
+  dfat_data:
+  ollama_models:

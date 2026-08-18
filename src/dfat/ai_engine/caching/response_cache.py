@@ -7,13 +7,16 @@ import hashlib
 import logging
 from collections import OrderedDict
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from dfat.ai_engine.llm.client import LLMResponse
+from dfat.api.schemas.base import API_JSON_ENCODERS
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TTL_SECONDS: int = 3600
 
 
 class CachedResponse(BaseModel):
@@ -30,7 +33,7 @@ class CachedResponse(BaseModel):
 class CacheStats(BaseModel):
     """Aggregate cache performance statistics."""
 
-    model_config = ConfigDict(frozen=False)
+    model_config = ConfigDict(frozen=False, json_encoders=API_JSON_ENCODERS)
 
     total_hits: int = 0
     total_misses: int = 0
@@ -43,15 +46,22 @@ class CacheStats(BaseModel):
 class AIResponseCache:
     """LRU + TTL cache for ``LLMResponse`` keyed by prompt/model/temperature.
 
+    Cache keys include the model name, temperature, and a SHA-256 hash of the
+    prompt. Default TTL is one hour (``DEFAULT_TTL_SECONDS``).
+
     Thread-safe for asyncio concurrent access via ``asyncio.Lock``.
     """
 
-    def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600) -> None:
+    def __init__(
+        self,
+        max_size: int = 1000,
+        ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    ) -> None:
         """Initialise the cache.
 
         Args:
             max_size: Maximum number of entries (LRU eviction when exceeded).
-            ttl_seconds: Time-to-live for entries in seconds.
+            ttl_seconds: Time-to-live for entries in seconds (default 1 hour).
         """
         self._max_size = max(1, max_size)
         self._ttl_seconds = max(0, ttl_seconds)
@@ -61,14 +71,27 @@ class AIResponseCache:
         self._misses = 0
         self._evictions = 0
 
+    @property
+    def ttl_seconds(self) -> int:
+        """Return the configured entry TTL in seconds."""
+        return self._ttl_seconds
+
+    def prompt_hash(self, prompt: str) -> str:
+        """Return the SHA-256 digest of ``prompt`` used in cache keys."""
+        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
     def _compute_cache_key(
         self,
         prompt: str,
         model: str,
         temperature: float,
     ) -> str:
-        """Return SHA-256 of ``prompt + model + str(temperature)``."""
-        payload = f"{prompt}{model}{temperature!s}"
+        """Return SHA-256 of ``model | temperature | prompt_hash``.
+
+        The key includes model name, temperature, and a prompt hash so identical
+        forensic prompts reuse completions without mixing model settings.
+        """
+        payload = f"{model}|{temperature:.6f}|{self.prompt_hash(prompt)}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     async def get(
@@ -149,3 +172,82 @@ class AIResponseCache:
             return False
         age = (datetime.now(UTC) - cached.cached_at).total_seconds()
         return age > self._ttl_seconds
+
+    def common_prompt_patterns(self) -> list[str]:
+        """Return rendered templates used for cache warming.
+
+        Patterns cover classification, ranking, and summary prompts with a
+        stable warmup artefact so repeated local-LLM calls can hit immediately.
+        """
+        from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
+
+        templates = ForensicPromptTemplates()
+        warmup_line = (
+            "[art-warmup] filesystem_metadata | path=/tmp/warmup "
+            "suspicion_level=informational"
+        )
+        return [
+            templates.render("classification", artefact_text=warmup_line),
+            templates.render("ranking", artefact_text=warmup_line),
+            templates.render(
+                "summary",
+                artefact_text=warmup_line,
+                total_count=1,
+                critical_count=0,
+                high_count=0,
+                categories="filesystem_metadata",
+            ),
+        ]
+
+    async def warm(
+        self,
+        prompt: str,
+        model: str,
+        temperature: float,
+        response: LLMResponse,
+    ) -> None:
+        """Insert a pre-computed response for a known prompt pattern."""
+        await self.put(prompt, model, temperature, response)
+
+    async def warm_common_patterns(
+        self,
+        model: str,
+        temperature: float,
+        generate: Optional[Callable[[str], Awaitable[LLMResponse]]] = None,
+    ) -> int:
+        """Pre-populate cache entries for common forensic prompt templates.
+
+        When ``generate`` is supplied it is used to produce live completions.
+        Otherwise a canned JSON/array placeholder is stored so later identical
+        prompts are cache hits without a network round-trip.
+
+        Args:
+            model: Model name included in the cache key.
+            temperature: Sampling temperature included in the cache key.
+            generate: Optional async ``prompt -> LLMResponse`` producer.
+
+        Returns:
+            Number of patterns warmed.
+        """
+        warmed = 0
+        for prompt in self.common_prompt_patterns():
+            if generate is not None:
+                response = await generate(prompt)
+            else:
+                response = LLMResponse(
+                    text="[]",
+                    model=model,
+                    prompt_tokens=self._estimate_prompt_tokens(prompt),
+                    completion_tokens=1,
+                )
+            await self.warm(prompt, model, temperature, response)
+            warmed += 1
+        logger.debug("Warmed %d common AI prompt patterns", warmed)
+        return warmed
+
+    @staticmethod
+    def _estimate_prompt_tokens(prompt: str) -> int:
+        """Estimate prompt tokens as ``len(text) / 4``."""
+        if not prompt:
+            return 0
+        return max(1, (len(prompt) + 3) // 4)

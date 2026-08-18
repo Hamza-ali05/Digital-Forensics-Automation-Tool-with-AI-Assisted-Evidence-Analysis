@@ -48,6 +48,10 @@
     "build-local": "set NODE_OPTIONS=--openssl-legacy-provider&& set PUBLIC_URL=./&& react-scripts build",
     "test": "react-scripts test",
     "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "test:pages": "react-scripts test --watchAll=false --testPathPattern=src/__tests__/pages",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
     "eject": "react-scripts eject"
   },
   "jest": {
@@ -58,12 +62,39 @@
       "src/services/**/*.{js,jsx}",
       "src/hooks/**/*.{js,jsx}",
       "src/guards/**/*.{js,jsx}",
-      "src/utils/**/*.{js,jsx}",
+      "src/utils/formatters.js",
+      "src/utils/validators.js",
+      "src/utils/constants.js",
+      "src/utils/permissions.js",
+      "src/utils/artefactLoader.js",
+      "src/pages/auth/Login.js",
+      "src/pages/cases/CaseList.js",
+      "src/pages/evidence/EvidenceDetail.js",
+      "src/pages/pipeline/PipelineDetail.js",
+      "src/pages/artefacts/ArtefactExplorer.js",
+      "src/pages/ai/AIAnalysis.js",
+      "src/pages/reports/ReportDetail.js",
+      "src/pages/dashboard/Dashboard.js",
+      "src/pages/evaluation/BenchmarkResults.js",
+      "src/pages/evaluation/Questionnaire.js",
       "src/components/common/StatusBadge.js",
+      "src/components/forensic/StatusTimeline.js",
+      "src/components/forensic/ChatInterface.js",
       "!src/**/*.test.js",
       "!src/__tests__/**",
       "!src/test-utils/**"
-    ]
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 0
+      },
+      "./src/services/": {
+        "statements": 75
+      },
+      "./src/pages/": {
+        "statements": 60
+      }
+    }
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -81,6 +112,9 @@
     ]
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.49.1",
+    "http-proxy-middleware": "^4.2.0",
     "msw": "^1.3.5"
   }
 }

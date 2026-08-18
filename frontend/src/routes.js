@@ -37,8 +37,10 @@ export const Routes = {
   EvaluationBenchmarkHistory: { path: "/evaluation/benchmark/history" },
   EvaluationPerformance: { path: "/evaluation/performance" },
   EvaluationUsability: { path: "/evaluation/usability" },
-    Settings: { path: "/settings" },
+  Settings: { path: "/settings" },
   SettingsUsers: { path: "/settings/users" },
+  SettingsAudit: { path: "/settings/audit" },
+  Help: { path: "/help" },
   Profile: { path: "/profile" },
   Questionnaire: { path: "/questionnaire" },
   Login: { path: "/auth/login" },
@@ -85,8 +87,10 @@ const PerformanceDashboard = lazy(() =>
 const UsabilityResults = lazy(() =>
   import("pages/evaluation/UsabilityResults")
 );
-const Settings = lazy(() => import("pages/settings/Settings"));
-const UserManagement = lazy(() => import("pages/settings/UserManagement"));
+const Settings = lazy(() => import("pages/admin/Settings"));
+const UserManagement = lazy(() => import("pages/admin/UserManagement"));
+const AuditLogs = lazy(() => import("pages/admin/AuditLogs"));
+const Help = lazy(() => import("pages/Help"));
 const Profile = lazy(() => import("pages/Profile"));
 
 const withSuspense = (node) => (
@@ -282,6 +286,15 @@ function ProtectedApp() {
             />
             <Route
               exact
+              path={Routes.SettingsAudit.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin"]}>
+                  <AuditLogs />
+                </RoleGuard>
+              )}
+            />
+            <Route
+              exact
               path={Routes.Settings.path}
               render={() => (
                 <RoleGuard allowedRoles={["admin"]}>
@@ -289,6 +302,7 @@ function ProtectedApp() {
                 </RoleGuard>
               )}
             />
+            <Route exact path={Routes.Help.path} component={Help} />
 
             <Redirect to={Routes.NotFound.path} />
           </Switch>

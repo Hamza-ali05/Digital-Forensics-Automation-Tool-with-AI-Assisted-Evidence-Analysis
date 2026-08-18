@@ -69,6 +69,47 @@ class CustodyRepository:
                 ) from exc
             return [custody_orm_to_domain(row) for row in rows]
 
+    async def get_chains(
+        self,
+        evidence_ids: list[str],
+    ) -> dict[str, list[ChainOfCustodyRecord]]:
+        """Batch-load ordered custody chains keyed by evidence identifier.
+
+        Args:
+            evidence_ids: Evidence identifiers to load.
+
+        Returns:
+            Mapping of evidence ID to ordered custody records. IDs with no
+            records map to an empty list.
+        """
+        unique_ids = list(dict.fromkeys(evidence_ids))
+        if not unique_ids:
+            return {}
+        async with self._session_factory() as session:
+            try:
+                result = await session.execute(
+                    select(ChainOfCustodyORM)
+                    .where(ChainOfCustodyORM.evidence_id.in_(unique_ids))
+                    .order_by(
+                        ChainOfCustodyORM.evidence_id.asc(),
+                        ChainOfCustodyORM.entry_number.asc(),
+                    )
+                )
+                rows = result.scalars().all()
+            except SQLAlchemyError as exc:
+                raise DatabaseError(
+                    "Failed to batch-load custody chains",
+                    context={"evidence_ids": unique_ids, "error": str(exc)},
+                ) from exc
+            grouped: dict[str, list[ChainOfCustodyRecord]] = {
+                evidence_id: [] for evidence_id in unique_ids
+            }
+            for row in rows:
+                grouped.setdefault(row.evidence_id, []).append(
+                    custody_orm_to_domain(row)
+                )
+            return grouped
+
     async def get_latest(self, evidence_id: str) -> ChainOfCustodyRecord | None:
         """Return the latest custody record for an evidence item."""
         async with self._session_factory() as session:

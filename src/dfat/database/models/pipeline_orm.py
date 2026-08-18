@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from dfat.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -19,6 +19,9 @@ class PipelineJobORM(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """
 
     __tablename__ = "pipeline_jobs"
+    __table_args__ = (
+        Index("ix_pipeline_jobs_status_created", "status", "created_at"),
+    )
 
     evidence_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
     case_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)

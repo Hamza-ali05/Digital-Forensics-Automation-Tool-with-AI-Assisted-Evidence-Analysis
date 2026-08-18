@@ -51,35 +51,38 @@ class SQLAlchemyArtefactRepository(IArtefactRepository):
 
     async def get(self, entity_id: str) -> Optional[ArtefactSet]:  # type: ignore[override]
         """Load all artefacts for an evidence ID into an ``ArtefactSet``."""
+        sets = await self.get_by_evidence_ids([entity_id])
+        return sets.get(entity_id)
+
+    async def get_by_evidence_ids(
+        self,
+        evidence_ids: list[str],
+    ) -> dict[str, ArtefactSet]:
+        """Batch-load artefact sets keyed by evidence identifier.
+
+        Args:
+            evidence_ids: Evidence identifiers to load.
+
+        Returns:
+            Mapping of evidence ID to artefact set. Missing IDs are omitted.
+        """
+        unique_ids = list(dict.fromkeys(evidence_ids))
+        if not unique_ids:
+            return {}
         async with self._session_factory() as session:
             try:
                 result = await session.execute(
                     select(ArtefactRecordORM).where(
-                        ArtefactRecordORM.evidence_id == entity_id
+                        ArtefactRecordORM.evidence_id.in_(unique_ids)
                     )
                 )
                 rows = list(result.scalars().all())
             except SQLAlchemyError as exc:
                 raise DatabaseError(
-                    "Failed to load artefact set",
-                    context={"evidence_id": entity_id, "error": str(exc)},
+                    "Failed to load artefact sets by evidence ids",
+                    context={"evidence_ids": unique_ids, "error": str(exc)},
                 ) from exc
-            if not rows:
-                return None
-            artefacts = [artefact_orm_to_domain(row) for row in rows]
-            categories = sorted(
-                {artefact.category for artefact in artefacts},
-                key=lambda item: item.value,
-            )
-            return ArtefactSet(
-                evidence_id=entity_id,
-                artefacts=artefacts,
-                categories_present=categories,
-                extraction_timestamp=max(
-                    (artefact.parsed_at for artefact in artefacts),
-                    default=datetime.now(UTC),
-                ),
-            )
+        return self._sets_from_rows(rows)
 
     async def list_all(self) -> list[ArtefactSet]:  # type: ignore[override]
         """List artefact sets grouped by evidence ID."""
@@ -92,25 +95,28 @@ class SQLAlchemyArtefactRepository(IArtefactRepository):
                     "Failed to list artefact sets",
                     context={"error": str(exc)},
                 ) from exc
+        return list(self._sets_from_rows(rows).values())
+
+    @staticmethod
+    def _sets_from_rows(rows: list[ArtefactRecordORM]) -> dict[str, ArtefactSet]:
+        """Group ORM artefact rows into domain ``ArtefactSet`` values."""
         grouped: dict[str, list[Artefact]] = {}
         for row in rows:
             grouped.setdefault(row.evidence_id, []).append(artefact_orm_to_domain(row))
-        sets: list[ArtefactSet] = []
+        sets: dict[str, ArtefactSet] = {}
         for evidence_id, artefacts in grouped.items():
             categories = sorted(
                 {artefact.category for artefact in artefacts},
                 key=lambda item: item.value,
             )
-            sets.append(
-                ArtefactSet(
-                    evidence_id=evidence_id,
-                    artefacts=artefacts,
-                    categories_present=categories,
-                    extraction_timestamp=max(
-                        (artefact.parsed_at for artefact in artefacts),
-                        default=datetime.now(UTC),
-                    ),
-                )
+            sets[evidence_id] = ArtefactSet(
+                evidence_id=evidence_id,
+                artefacts=artefacts,
+                categories_present=categories,
+                extraction_timestamp=max(
+                    (artefact.parsed_at for artefact in artefacts),
+                    default=datetime.now(UTC),
+                ),
             )
         return sets
 

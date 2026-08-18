@@ -9,6 +9,8 @@ from fastapi import FastAPI
 
 from dfat import __version__
 from dfat.api.middleware.audit import AuditTrailMiddleware
+from dfat.api.middleware.cache import ResponseCacheMiddleware
+from dfat.api.middleware.compression import CompressionMiddleware
 from dfat.api.middleware.cors import configure_cors
 from dfat.api.middleware.error_handler import GlobalExceptionHandler
 from dfat.api.middleware.rate_limiter import RateLimiterMiddleware
@@ -89,8 +91,8 @@ def create_app() -> FastAPI:
     """Create and configure the DFAT FastAPI application.
 
     Middleware order (request path, outermost → innermost):
-    RequestID → SecurityHeaders → RateLimiter → CORS → Audit →
-    RequestValidation → routes / GlobalExceptionHandler.
+    RequestID → Compression → SecurityHeaders → RateLimiter → CORS →
+    Cache → Audit → RequestValidation → routes / GlobalExceptionHandler.
 
     Returns:
         Configured FastAPI application with DI container attached.
@@ -126,9 +128,11 @@ def create_app() -> FastAPI:
     audit_logger = container.logging.forensic_audit_logger()
     app.add_middleware(RequestValidationMiddleware)
     app.add_middleware(AuditTrailMiddleware, audit_logger=audit_logger)
+    app.add_middleware(ResponseCacheMiddleware)
     configure_cors(app, settings)
     app.add_middleware(RateLimiterMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(CompressionMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
     api_prefix = API_V1_PREFIX

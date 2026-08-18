@@ -33,6 +33,9 @@ secrets.json
 .coverage
 .coverage.*
 coverage.xml
+coverage.json
+coverage_boost.json
+coverage_fe.json
 htmlcov/
 coverage/
 .tox/
@@ -41,10 +44,15 @@ coverage/
 .dmypy.json
 dmypy.json
 
+# Generated reports
+reports/
+
 # Frontend (CRA / npm) — also covered by frontend/.gitignore
 frontend/node_modules/
 frontend/build/
 frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
 frontend/.env
 frontend/.env.local
 frontend/.env.development

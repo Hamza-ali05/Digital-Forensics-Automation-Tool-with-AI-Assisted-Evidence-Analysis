@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from dfat.ai_engine.caching.response_cache import AIResponseCache
 from dfat.ai_engine.llm.client import LLMResponse, OllamaClient
 from dfat.ai_engine.llm.config import LLMConfig
 from dfat.ai_engine.llm.connection import LLMConnectionManager
@@ -192,3 +193,38 @@ async def test_retry_on_failure(mock_audit_logger: MagicMock) -> None:
     assert isinstance(result, LLMResponse)
     assert result.text == "classified HIGH"
     assert mock_client.post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_returns_cached_response_on_second_call(
+    mock_audit_logger: MagicMock,
+) -> None:
+    """Identical prompt/model/temperature reuse the AI response cache."""
+    cache = AIResponseCache(ttl_seconds=3600)
+    config = LLMConfig(
+        api_url="http://127.0.0.1:11434",
+        model="llama3",
+        max_retries=1,
+        retry_delay_seconds=0.0,
+        request_timeout_seconds=5,
+    )
+    connection = LLMConnectionManager(config, mock_audit_logger)
+    client = OllamaClient(config, connection, mock_audit_logger, cache=cache)
+
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.json.return_value = _ok_generate_payload()
+    ok.raise_for_status = MagicMock()
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=ok)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        first = await client.generate("classify artefact set")
+        second = await client.generate("classify artefact set")
+
+    assert first.text == second.text
+    assert mock_client.post.await_count == 1
+    stats = await cache.get_stats()
+    assert stats.total_hits >= 1

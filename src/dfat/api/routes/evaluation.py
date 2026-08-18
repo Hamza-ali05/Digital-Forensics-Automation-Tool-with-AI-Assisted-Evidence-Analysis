@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import PlainTextResponse
 
 from dfat.api.dependencies import get_evaluation_service, require_permission, require_role
@@ -132,10 +132,16 @@ async def submit_usability_response(
     evaluation_service: EvaluationService = Depends(get_evaluation_service),
 ) -> UsabilitySubmitResponse:
     """Submit an anonymised usability questionnaire response (no auth)."""
-    participant_id = await evaluation_service.collect_usability_response(
-        ratings=body.ratings,
-        free_text=body.free_text,
-    )
+    try:
+        participant_id = await evaluation_service.collect_usability_response(
+            ratings=body.ratings,
+            free_text=body.free_text,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
     return UsabilitySubmitResponse(participant_id=participant_id)
 
 

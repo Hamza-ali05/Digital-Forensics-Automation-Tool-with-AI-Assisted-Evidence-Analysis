@@ -46,6 +46,7 @@ export default function DataTable({
   actions,
   getRowClassName,
   getRowStyle,
+  caption,
 }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
@@ -108,7 +109,15 @@ export default function DataTable({
 
   return (
     <div className="dfat-data-table">
-      <Table responsive hover className="align-items-center table-flush">
+      <Table
+        responsive
+        hover
+        className="align-items-center table-flush"
+        aria-label={caption || emptyMessage || "Data table"}
+      >
+        <caption className="visually-hidden">
+          {caption || "Tabular data"}
+        </caption>
         <thead className="thead-light">
           <tr>
             {selectable ? (
@@ -129,6 +138,23 @@ export default function DataTable({
                   key={key}
                   style={canSort ? { cursor: "pointer", userSelect: "none" } : undefined}
                   onClick={() => canSort && handleSort(column)}
+                  onKeyDown={(event) => {
+                    if (canSort && (event.key === "Enter" || event.key === " ")) {
+                      event.preventDefault();
+                      handleSort(column);
+                    }
+                  }}
+                  tabIndex={canSort ? 0 : undefined}
+                  role={canSort ? "columnheader" : undefined}
+                  aria-sort={
+                    canSort && sortKey === (column.key || column.accessor)
+                      ? sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : canSort
+                        ? "none"
+                        : undefined
+                  }
                 >
                   {column.header || column.label || key}
                   {canSort && sortKey === (column.key || column.accessor) ? (
@@ -201,21 +227,27 @@ export default function DataTable({
             Page {pageInfo.page} of {pageInfo.totalPages} ({pageInfo.total}{" "}
             total)
           </span>
-          <Pagination className="mb-0">
+          <nav aria-label="Table pagination">
+            <Pagination className="mb-0">
             <Pagination.Prev
               disabled={pageInfo.page <= 1}
+              aria-label="Previous page"
               onClick={() =>
                 onPageChange && onPageChange(pageInfo.page - 1, pageInfo)
               }
             />
-            <Pagination.Item active>{pageInfo.page}</Pagination.Item>
+            <Pagination.Item active aria-current="page">
+              {pageInfo.page}
+            </Pagination.Item>
             <Pagination.Next
               disabled={pageInfo.page >= pageInfo.totalPages}
+              aria-label="Next page"
               onClick={() =>
                 onPageChange && onPageChange(pageInfo.page + 1, pageInfo)
               }
             />
-          </Pagination>
+            </Pagination>
+          </nav>
         </div>
       ) : null}
 

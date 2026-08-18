@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -90,6 +91,7 @@ def test_build_complete_report_includes_json_and_narrative(
     assert report.case.case_name == sample_case_metadata.case_name
     assert report.audit_metadata.get("generated_by_user_id") == "analyst-1"
     assert report.audit_metadata.get("pipeline_job_id") == "job-1"
+    asyncio.run(builder.persist_report(report))
     report_repo.save.assert_called_once()
     assert audit_service.log_action.await_count >= 3
 
@@ -125,6 +127,7 @@ def test_build_complete_report_with_summary_result(
     )
     assert isinstance(report, ForensicReport)
     assert "Executive summary for case." in report.narrative_report.summary_text
+    asyncio.run(builder.persist_report(report))
     report_repo.save.assert_called_once()
 
 
@@ -149,6 +152,7 @@ def test_build_complete_report_persists_via_repository(
             "reporting_s": 0.1,
         },
     )
+    asyncio.run(builder.persist_report(report))
     report_repo.save.assert_called()
     saved = report_repo.save.call_args.args[0]
     assert isinstance(saved, ForensicReport)

@@ -1,5 +1,6 @@
 """DFAT API Schemas — Pydantic request and response models."""
 
+from dfat.api.schemas.base import APIModel
 from dfat.api.schemas.requests import (
     AnalysisRunRequest,
     BenchmarkRunRequest,
@@ -24,6 +25,7 @@ from dfat.api.schemas.responses import (
 )
 
 __all__ = [
+    "APIModel",
     "AnalysisRunRequest",
     "AnalysisStatusResponse",
     "BenchmarkResponse",

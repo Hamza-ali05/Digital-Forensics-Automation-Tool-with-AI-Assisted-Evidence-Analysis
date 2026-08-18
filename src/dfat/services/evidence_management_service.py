@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -186,18 +187,22 @@ class EvidenceManagementService:
             "case_id": case_id,
         }
 
+    async def get_registered_evidence(self, evidence_id: str):
+        """Return the domain evidence object used by the forensic pipeline."""
+        return await self._evidence_service.get_evidence(evidence_id)
+
     async def get_evidence_detail(self, evidence_id: str) -> dict[str, Any]:
         """Return a comprehensive evidence view (metadata, status, custody)."""
-        evidence = await self._evidence_service.get_evidence(evidence_id)
-        metadata = await self._metadata_repo.get_metadata(evidence_id)
-        status = await self._status_repo.get_current_status(evidence_id)
-        history = await self._status_repo.get_history(evidence_id)
-        chain = await self._custody.get_custody_chain(evidence_id)
+        evidence, metadata, status, history, chain, stored = await asyncio.gather(
+            self._evidence_service.get_evidence(evidence_id),
+            self._metadata_repo.get_metadata(evidence_id),
+            self._status_repo.get_current_status(evidence_id),
+            self._status_repo.get_history(evidence_id),
+            self._custody.get_custody_chain(evidence_id),
+            self._evidence_repo.get(evidence_id),
+        )
 
-        case = None
         case_id = evidence.case.case_id
-        # Prefer the management case linkage on the evidence record when present.
-        stored = await self._evidence_repo.get(evidence_id)
         if stored is not None:
             case_id = stored.case.case_id
         case = await self._case_repo.get(case_id)
@@ -253,19 +258,19 @@ class EvidenceManagementService:
             case = await self._case_repo.get(case_id)
             if case is None:
                 raise CaseNotFoundError(f"Case not found: {case_id}", case_id=case_id)
-            evidence_list = []
-            for eid in case.evidence_ids:
-                item = await self._evidence_repo.get(eid)
-                if item is not None:
-                    evidence_list.append(item)
+            evidence_list = await self._evidence_repo.get_by_case(case_id)
         else:
             evidence_list = await self._evidence_repo.list_all()
 
+        evidence_ids = [evidence.evidence_id for evidence in evidence_list]
+        status_map = await self._status_repo.get_current_statuses(evidence_ids)
+        metadata_map = await self._metadata_repo.get_by_evidence_ids(evidence_ids)
+        chains_map = await self._custody.get_custody_chains(evidence_ids)
+
         inventory: list[EvidenceInventoryItem] = []
         for evidence in evidence_list:
-            status = await self._status_repo.get_current_status(evidence.evidence_id)
-            metadata = await self._metadata_repo.get_metadata(evidence.evidence_id)
-            chain = await self._custody.get_custody_chain(evidence.evidence_id)
+            chain = chains_map.get(evidence.evidence_id, [])
+            metadata = metadata_map.get(evidence.evidence_id)
             last_verified = None
             for record in reversed(chain):
                 if record.action is CustodyAction.ACCESSED:
@@ -278,7 +283,8 @@ class EvidenceManagementService:
                     case_name=evidence.case.case_name,
                     file_name=Path(evidence.file_path).name,
                     evidence_type=evidence.evidence_type,
-                    status=status or EvidenceStatus.REGISTERED,
+                    status=status_map.get(evidence.evidence_id)
+                    or EvidenceStatus.REGISTERED,
                     hash_set=metadata.hash_set if metadata else None,
                     mime_type=metadata.mime_type if metadata else None,
                     file_size_bytes=evidence.file_size_bytes,

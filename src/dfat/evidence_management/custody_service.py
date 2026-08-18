@@ -262,6 +262,13 @@ class ChainOfCustodyService:
         """Return the ordered custody chain for an evidence item."""
         return await self._custody_repo.get_chain(evidence_id)
 
+    async def get_custody_chains(
+        self,
+        evidence_ids: list[str],
+    ) -> dict[str, list[ChainOfCustodyRecord]]:
+        """Batch-load ordered custody chains for many evidence items."""
+        return await self._custody_repo.get_chains(evidence_ids)
+
     async def verify_custody_chain(
         self,
         evidence_id: str,

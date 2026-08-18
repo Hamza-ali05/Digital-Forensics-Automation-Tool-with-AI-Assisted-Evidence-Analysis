@@ -131,8 +131,12 @@ Investigator question: {{ question }}
     SUMMARY_PROMPT = SUMMARY_TEMPLATE
 
     def __init__(self) -> None:
-        """Initialise Jinja2 with ``StrictUndefined`` to catch missing variables."""
-        self._env = Environment(
+        """Initialise Jinja2 with ``StrictUndefined`` to catch missing variables.
+
+        Prompt templates render forensic plaintext, not HTML. Autoescape is
+        disabled so artefact paths and XML are not entity-encoded.
+        """
+        self._env = Environment(  # nosec B701
             loader=BaseLoader(),
             undefined=StrictUndefined,
             autoescape=False,

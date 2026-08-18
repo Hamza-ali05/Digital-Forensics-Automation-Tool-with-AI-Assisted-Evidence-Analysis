@@ -40,6 +40,8 @@ export const ROUTE_PERMISSIONS = Object.freeze({
   "/reports": { resource: "reports", action: "read" },
   "/evaluation": { resource: "evaluation", action: "read" },
   "/settings": { resource: "users", action: "read" },
+  "/settings/users": { resource: "users", action: "read" },
+  "/settings/audit": { resource: "users", action: "read" },
 });
 
 /**

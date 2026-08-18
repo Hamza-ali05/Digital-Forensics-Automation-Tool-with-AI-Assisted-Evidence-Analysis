@@ -14,6 +14,7 @@ database:
   url: "sqlite+aiosqlite:///./.pytest_tmp/dfat_test.db"
   echo: false
   create_tables_on_startup: true
+  enable_query_monitoring: false
 auth:
   secret_key: "test-secret-key-not-for-production"
   access_token_expire_minutes: 5

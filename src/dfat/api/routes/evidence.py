@@ -11,6 +11,7 @@ from dfat.api.dependencies import get_evidence_service, require_permission
 from dfat.api.schemas.requests import EvidenceUploadRequest
 from dfat.api.schemas.responses import EvidenceResponse
 from dfat.core.models.evidence import EvidenceImage
+from dfat.core.exceptions import EvidenceNotFoundError
 from dfat.database.models.user import UserORM
 from dfat.services.evidence_service import EvidenceService
 
@@ -74,3 +75,18 @@ async def list_evidence(
     """List all registered evidence."""
     items = await evidence_service.list_evidence()
     return [_to_response(item) for item in items]
+
+
+@router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_evidence(
+    evidence_id: str,
+    current_user: UserORM = Depends(require_permission("evidence", "delete")),
+    evidence_service: EvidenceService = Depends(get_evidence_service),
+) -> None:
+    """Delete evidence metadata (original file is retained on disk)."""
+    deleted = await evidence_service.delete_evidence(evidence_id, current_user.id)
+    if not deleted:
+        raise EvidenceNotFoundError(
+            f"Evidence {evidence_id} was not found",
+            context={"evidence_id": evidence_id},
+        )

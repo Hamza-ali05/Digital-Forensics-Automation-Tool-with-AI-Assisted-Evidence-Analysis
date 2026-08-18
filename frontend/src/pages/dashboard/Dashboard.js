@@ -307,7 +307,7 @@ export default function Dashboard() {
       />
 
       {/* TOP — Statistics */}
-      <Row className="mb-4">
+      <Row className="mb-4" data-testid="dashboard-stats">
         <Col xs={12} sm={6} xl={3} className="mb-3 mb-xl-0">
           <StatCard
             title="Active Cases"
@@ -364,6 +364,8 @@ export default function Dashboard() {
                 <div style={{ maxHeight: 280 }}>
                   <Doughnut
                     data={doughnutData}
+                    aria-label="Evidence items by category"
+                    role="img"
                     options={{
                       responsive: true,
                       maintainAspectRatio: true,
@@ -394,6 +396,8 @@ export default function Dashboard() {
                 <div style={{ minHeight: 240 }}>
                   <Bar
                     data={suspicionData.chart}
+                    aria-label="Artefacts by suspicion level"
+                    role="img"
                     options={{
                       indexAxis: "y",
                       responsive: true,

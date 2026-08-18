@@ -33,10 +33,10 @@ export default function EmptyState({
           {IconComponent ? (
             <IconComponent />
           ) : (
-            <FontAwesomeIcon icon={icon || faInbox} size="3x" />
+            <FontAwesomeIcon icon={icon || faInbox} size="3x" aria-hidden="true" />
           )}
         </div>
-        {title ? <h5 className="mb-2">{title}</h5> : null}
+        {title ? <p className="h5 mb-2">{title}</p> : null}
         {description ? (
           <p className="text-muted mb-3 mx-auto" style={{ maxWidth: 420 }}>
             {description}

@@ -201,6 +201,16 @@ def _database_max_overflow(settings: DFATSettings) -> int:
     return settings.database.max_overflow
 
 
+def _database_enable_query_monitoring(settings: DFATSettings) -> bool:
+    """Extract slow-query monitoring flag from settings."""
+    return settings.database.enable_query_monitoring
+
+
+def _database_slow_query_threshold_ms(settings: DFATSettings) -> int:
+    """Extract slow-query duration threshold from settings."""
+    return settings.database.slow_query_threshold_ms
+
+
 def _auth_secret_key(settings: DFATSettings) -> str:
     """Extract JWT secret key from settings."""
     return settings.auth.secret_key
@@ -532,6 +542,13 @@ def _llm_config(settings: DFATSettings) -> LLMConfig:
     )
 
 
+def _ai_response_cache(settings: DFATSettings) -> AIResponseCache:
+    """Build the AI response cache using configured TTL (default 1 hour)."""
+    ai: AIEngineSettings = settings.ai_engine
+    ttl = ai.cache_ttl_seconds if ai.cache_responses else 3600
+    return AIResponseCache(max_size=1000, ttl_seconds=ttl)
+
+
 def _enable_fallback(settings: DFATSettings) -> bool:
     """Extract fallback toggle from settings."""
     return settings.ai_engine.enable_fallback
@@ -551,6 +568,7 @@ class AIEngineContainer(containers.DeclarativeContainer):
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
 
     llm_config = providers.Singleton(_llm_config, settings)
+    ai_response_cache = providers.Singleton(_ai_response_cache, settings)
     connection_manager = providers.Singleton(
         LLMConnectionManager,
         config=llm_config,
@@ -561,6 +579,7 @@ class AIEngineContainer(containers.DeclarativeContainer):
         config=llm_config,
         connection_manager=connection_manager,
         audit_logger=audit_logger,
+        cache=ai_response_cache,
     )
     prompts = providers.Singleton(ForensicPromptTemplates)
     artefact_serializer = providers.Singleton(ArtefactSerializer)
@@ -620,11 +639,6 @@ class AIEngineContainer(containers.DeclarativeContainer):
         AIResponseValidator,
         hallucination_guard=hallucination_guard,
         confidence_scorer=confidence_scorer,
-    )
-    ai_response_cache = providers.Singleton(
-        AIResponseCache,
-        max_size=1000,
-        ttl_seconds=3600,
     )
     ai_monitor = providers.Singleton(
         AIMonitor,
@@ -696,7 +710,7 @@ class ReportingEngineContainer(containers.DeclarativeContainer):
 
     settings = providers.Dependency(instance_of=DFATSettings)
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
-    report_repo = providers.Dependency(instance_of=FileSystemReportRepository)
+    report_repo = providers.Dependency(instance_of=SQLAlchemyReportRepository)
     audit_repo = providers.Dependency(instance_of=SQLAlchemyAuditRepository)
 
     audit_service = providers.Factory(
@@ -1044,6 +1058,12 @@ class DatabaseContainer(containers.DeclarativeContainer):
         echo=providers.Callable(_database_echo, settings),
         pool_size=providers.Callable(_database_pool_size, settings),
         max_overflow=providers.Callable(_database_max_overflow, settings),
+        enable_query_monitoring=providers.Callable(
+            _database_enable_query_monitoring, settings
+        ),
+        slow_query_threshold_ms=providers.Callable(
+            _database_slow_query_threshold_ms, settings
+        ),
     )
     session_factory = providers.Callable(
         lambda engine: engine.session_factory,
@@ -1250,7 +1270,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
         ReportingEngineContainer,
         settings=settings,
         audit_logger=logging.forensic_audit_logger,
-        report_repo=repositories.file_report_repo,
+        report_repo=repositories.report_repo,
         audit_repo=repositories.audit_repo,
     )
     evaluation_engine = providers.Container(

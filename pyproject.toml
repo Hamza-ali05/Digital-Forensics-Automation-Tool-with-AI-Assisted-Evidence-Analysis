@@ -64,6 +64,7 @@ dev = [
     "types-PyYAML>=6.0",
     "types-jsonschema>=4.20",
     "pre-commit>=3.4",
+    "bandit>=1.7",
 ]
 
 [project.scripts]
@@ -107,4 +108,13 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --tb=short --strict-markers"
+addopts = "-v --tb=short --strict-markers -m 'not performance'"
+markers = [
+    "performance: query, API, and AI latency tests (run via make test-performance)",
+    "requires_ollama: tests that need a running local Ollama instance",
+    "quality: AI parsing, scoring, and hallucination tests (no LLM required)",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv"]
+skips = ["B101"]

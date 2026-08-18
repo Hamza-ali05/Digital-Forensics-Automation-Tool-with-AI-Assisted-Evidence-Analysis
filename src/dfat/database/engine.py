@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from dfat.database.base import Base
+from dfat.database.query_monitor import QueryMonitor
 
 
 class DatabaseEngine:
@@ -29,6 +30,8 @@ class DatabaseEngine:
         echo: bool = False,
         pool_size: int = 5,
         max_overflow: int = 10,
+        enable_query_monitoring: bool = False,
+        slow_query_threshold_ms: int = 100,
     ) -> None:
         """Initialise the async engine and session factory.
 
@@ -37,6 +40,8 @@ class DatabaseEngine:
             echo: Whether to log SQL statements.
             pool_size: Connection pool size (ignored for SQLite).
             max_overflow: Max overflow connections (ignored for SQLite).
+            enable_query_monitoring: Attach ``QueryMonitor`` slow-query logging.
+            slow_query_threshold_ms: Duration above which queries are logged.
         """
         engine_kwargs: dict[str, Any] = {"echo": echo}
         if database_url.startswith("sqlite"):
@@ -56,6 +61,10 @@ class DatabaseEngine:
             expire_on_commit=False,
             autoflush=False,
         )
+        self._query_monitor: QueryMonitor | None = None
+        if enable_query_monitoring:
+            self._query_monitor = QueryMonitor(threshold_ms=slow_query_threshold_ms)
+            self._query_monitor.attach(self._engine)
 
     @property
     def engine(self) -> AsyncEngine:
@@ -98,6 +107,9 @@ class DatabaseEngine:
 
     async def dispose(self) -> None:
         """Dispose the engine connection pool."""
+        if self._query_monitor is not None:
+            self._query_monitor.detach(self._engine)
+            self._query_monitor = None
         await self._engine.dispose()
 
     async def check_connection(self) -> bool:
@@ -120,6 +132,8 @@ def engine_factory(
     echo: bool = False,
     pool_size: int = 5,
     max_overflow: int = 10,
+    enable_query_monitoring: bool = False,
+    slow_query_threshold_ms: int = 100,
 ) -> DatabaseEngine:
     """Create a ``DatabaseEngine`` instance.
 
@@ -128,6 +142,8 @@ def engine_factory(
         echo: Whether to log SQL statements.
         pool_size: Connection pool size (non-SQLite).
         max_overflow: Max overflow connections (non-SQLite).
+        enable_query_monitoring: Attach slow-query logging.
+        slow_query_threshold_ms: Duration above which queries are logged.
 
     Returns:
         Configured ``DatabaseEngine``.
@@ -137,6 +153,8 @@ def engine_factory(
         echo=echo,
         pool_size=pool_size,
         max_overflow=max_overflow,
+        enable_query_monitoring=enable_query_monitoring,
+        slow_query_threshold_ms=slow_query_threshold_ms,
     )
 
 

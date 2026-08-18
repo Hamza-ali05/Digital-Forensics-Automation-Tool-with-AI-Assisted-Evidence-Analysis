@@ -105,11 +105,25 @@ class JWTHandler:
             TokenInvalidError: If the token is malformed or invalid.
         """
         try:
+            header = jwt.get_unverified_header(token)
+            algorithm = str(header.get("alg") or "")
+            if not algorithm or algorithm.lower() == "none":
+                raise TokenInvalidError(
+                    "Token algorithm is not allowed",
+                    context={"alg": algorithm or "missing"},
+                )
+            if algorithm != self._algorithm:
+                raise TokenInvalidError(
+                    "Token algorithm is not allowed",
+                    context={"alg": algorithm},
+                )
             return jwt.decode(
                 token,
                 self._secret_key,
                 algorithms=[self._algorithm],
             )
+        except (TokenExpiredError, TokenInvalidError):
+            raise
         except ExpiredSignatureError as exc:
             token_type = "access"
             try:

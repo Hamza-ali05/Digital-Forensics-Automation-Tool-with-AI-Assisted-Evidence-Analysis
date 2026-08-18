@@ -22,6 +22,7 @@ export default function SearchInput({
   onChange,
   debounceMs = 300,
   className = "",
+  id,
 }) {
   const [internal, setInternal] = useState(value);
   const debounced = useDebounce(internal, debounceMs);
@@ -50,9 +51,10 @@ export default function SearchInput({
       <Form.Group className="mb-0">
         <InputGroup className="input-group-merge search-bar">
           <InputGroup.Text>
-            <FontAwesomeIcon icon={faSearch} />
+            <FontAwesomeIcon icon={faSearch} aria-hidden="true" />
           </InputGroup.Text>
           <Form.Control
+            id={id}
             type="search"
             placeholder={placeholder}
             value={internal}
@@ -66,7 +68,7 @@ export default function SearchInput({
               onClick={clear}
               aria-label="Clear search"
             >
-              <FontAwesomeIcon icon={faTimes} />
+              <FontAwesomeIcon icon={faTimes} aria-hidden="true" />
             </Button>
           ) : null}
         </InputGroup>

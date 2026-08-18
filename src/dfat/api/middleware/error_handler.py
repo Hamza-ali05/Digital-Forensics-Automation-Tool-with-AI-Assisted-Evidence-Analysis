@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -262,7 +263,7 @@ class GlobalExceptionHandler:
             request: Request,
             exc: AccountDisabledError,
         ) -> JSONResponse:
-            return GlobalExceptionHandler._error_response(request, exc, 403)
+            return GlobalExceptionHandler._error_response(request, exc, 401)
 
         @app.exception_handler(InsufficientPermissionsError)
         async def _insufficient_permissions(
@@ -310,7 +311,7 @@ class GlobalExceptionHandler:
                     error_type="RequestValidationError",
                     message="Request validation failed",
                     timestamp=datetime.now(UTC),
-                    details={"errors": exc.errors()},
+                    details={"errors": GlobalExceptionHandler._serializable_errors(exc.errors())},
                     request_id=_request_id(request),
                 ).model_dump(mode="json"),
             )
@@ -326,7 +327,7 @@ class GlobalExceptionHandler:
                     error_type="ValidationError",
                     message="Validation failed",
                     timestamp=datetime.now(UTC),
-                    details={"errors": exc.errors()},
+                    details={"errors": GlobalExceptionHandler._serializable_errors(exc.errors())},
                     request_id=_request_id(request),
                 ).model_dump(mode="json"),
             )
@@ -351,6 +352,23 @@ class GlobalExceptionHandler:
             )
 
     @staticmethod
+    def _serializable_errors(errors: list[Any]) -> list[Any]:
+        """JSON-serialize Pydantic error dicts that may contain exception objects."""
+        return json.loads(json.dumps(errors, default=str))
+
+    @staticmethod
+    def _redact_details(details: dict[str, Any]) -> dict[str, Any]:
+        """Drop credential-like keys from error payloads."""
+        blocked = {"password", "secret", "token", "traceback", "stack", "exception"}
+        redacted: dict[str, Any] = {}
+        for key, value in details.items():
+            lowered = str(key).lower()
+            if lowered in blocked or any(word in lowered for word in blocked):
+                continue
+            redacted[key] = value
+        return redacted
+
+    @staticmethod
     def _error_response(
         request: Request,
         exc: DFATError,
@@ -362,6 +380,7 @@ class GlobalExceptionHandler:
         details = dict(exc.context)
         if extra_details:
             details.update(extra_details)
+        details = GlobalExceptionHandler._redact_details(details)
         return JSONResponse(
             status_code=status_code,
             content=ErrorResponse(

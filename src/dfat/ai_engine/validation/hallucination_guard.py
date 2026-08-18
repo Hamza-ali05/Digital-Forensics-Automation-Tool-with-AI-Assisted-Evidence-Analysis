@@ -218,7 +218,7 @@ class HallucinationGuard:
     def _find_unknown_knowledge_claims(self, text: str) -> list[str]:
         claims: list[str] = []
         for ip in _IPV4_RE.findall(text):
-            if ip.lower() not in self._known_facts and ip not in {"0.0.0.0", "127.0.0.1"}:
+            if ip.lower() not in self._known_facts and ip not in {"0.0.0.0", "127.0.0.1"}:  # nosec B104
                 claims.append(ip)
         for domain in _DOMAIN_RE.findall(text):
             lowered = domain.lower()

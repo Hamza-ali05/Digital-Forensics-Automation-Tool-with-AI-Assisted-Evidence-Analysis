@@ -18,6 +18,7 @@ import {
 import ApiErrorDisplay from "components/common/ApiErrorDisplay";
 import SkeletonLoader from "components/common/SkeletonLoader";
 import evaluationService from "services/evaluation.service";
+import usePageTitle from "hooks/usePageTitle";
 
 const MAX_FREE_TEXT = 1000;
 
@@ -77,9 +78,9 @@ function isOpen(question) {
   return !isLikert(question);
 }
 
-function LikertScale({ questionId, value, invalid, onChange }) {
+function LikertScale({ questionId, labelledBy, value, invalid, onChange }) {
   return (
-    <fieldset className="border-0 p-0 m-0">
+    <fieldset className="border-0 p-0 m-0" aria-labelledby={labelledBy}>
       <legend className="visually-hidden">
         5-point agreement scale for {questionId}
       </legend>
@@ -139,6 +140,7 @@ function LikertScale({ questionId, value, invalid, onChange }) {
  * Public ethics-approved usability questionnaire — no authentication.
  */
 export default function Questionnaire() {
+  usePageTitle("Usability questionnaire");
   const [infoOpen, setInfoOpen] = useState(true);
   const [questions, setQuestions] = useState(FALLBACK_QUESTIONS);
   const [loading, setLoading] = useState(true);
@@ -256,24 +258,30 @@ export default function Questionnaire() {
     <div className="mx-auto" style={{ maxWidth: 800 }}>
       <header className="text-center mb-4">
         <div className="text-primary mb-2">
-          <FontAwesomeIcon icon={faUniversity} size="2x" />
+          <FontAwesomeIcon icon={faUniversity} size="2x" aria-hidden="true" />
         </div>
         <h1 className="h3 mb-1">DFAT Usability Assessment</h1>
         <p className="text-muted mb-0">Canterbury Christ Church University</p>
       </header>
 
       <Card border="light" className="shadow-sm mb-4">
-        <Card.Header
-          className="d-flex justify-content-between align-items-center"
-          style={{ cursor: "pointer" }}
-          onClick={() => setInfoOpen((prev) => !prev)}
-          aria-expanded={infoOpen}
-        >
-          <h5 className="mb-0">Participant information</h5>
-          <FontAwesomeIcon icon={infoOpen ? faCaretDown : faCaretRight} />
+        <Card.Header className="p-0">
+          <button
+            type="button"
+            className="btn btn-link text-decoration-none text-dark w-100 d-flex justify-content-between align-items-center px-3 py-2"
+            onClick={() => setInfoOpen((prev) => !prev)}
+            aria-expanded={infoOpen}
+            aria-controls="participant-info"
+          >
+            <span className="h5 mb-0">Participant information</span>
+            <FontAwesomeIcon
+              icon={infoOpen ? faCaretDown : faCaretRight}
+              aria-hidden="true"
+            />
+          </button>
         </Card.Header>
         <Collapse in={infoOpen}>
-          <div>
+          <div id="participant-info">
             <Card.Body>
               <p>
                 You are invited to evaluate the Digital Forensics Automation Tool
@@ -325,9 +333,12 @@ export default function Questionnaire() {
                 <div className="small text-muted text-uppercase fw-bold mb-1">
                   {question.id}
                 </div>
-                <p className="fs-5 mb-3">{question.text}</p>
+                <p id={`${question.id}-text`} className="fs-5 mb-3">
+                  {question.text}
+                </p>
                 <LikertScale
                   questionId={question.id}
+                  labelledBy={`${question.id}-text`}
                   value={ratings[question.id]}
                   invalid={Boolean(fieldErrors[question.id])}
                   onChange={(value) => setRating(question.id, value)}
@@ -342,16 +353,22 @@ export default function Questionnaire() {
                 <div className="small text-muted text-uppercase fw-bold mb-1">
                   {openQuestion.id}
                 </div>
-                <p className="fs-5 mb-3">{openQuestion.text}</p>
+                <p id={`${openQuestion.id}-text`} className="fs-5 mb-3">
+                  {openQuestion.text}
+                </p>
                 <Form.Group>
+                  <Form.Label htmlFor="questionnaire-feedback" className="visually-hidden">
+                    Additional feedback
+                  </Form.Label>
                   <Form.Control
+                    id="questionnaire-feedback"
                     as="textarea"
                     rows={5}
                     maxLength={MAX_FREE_TEXT}
                     value={freeText}
                     onChange={handleFreeText}
                     placeholder="Optional comments"
-                    aria-label="Additional feedback"
+                    aria-labelledby={`${openQuestion.id}-text`}
                   />
                   <div className="d-flex justify-content-between mt-2">
                     <Form.Text>Your response is anonymous</Form.Text>
