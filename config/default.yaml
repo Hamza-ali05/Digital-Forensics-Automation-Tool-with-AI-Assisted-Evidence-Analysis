@@ -39,6 +39,7 @@ ai_engine:
   cache_responses: true
   cache_ttl_seconds: 3600
   max_input_artefacts: 500
+  use_rag: true
 
 # Stage 4 dual-output reporting settings.
 reporting:
@@ -106,3 +107,46 @@ pipeline:
   enable_ioc_detection: true
   volatility_plugins_timeout: 300
   enable_memory_registry: true
+
+# Dataset intelligence extension package (Prompt 11 additive subsystem).
+dataset_intelligence:
+  datasets_dir: data/datasets
+  scan_on_startup: true
+  watch_for_changes: true
+  watch_interval_seconds: 60
+  max_dataset_size_gb: 100
+  auto_index: true
+  auto_preprocess: true
+  supported_extensions:
+    - ".dd"
+    - ".raw"
+    - ".e01"
+    - ".vmem"
+    - ".pcap"
+    - ".evtx"
+    - ".csv"
+    - ".json"
+    - ".xml"
+    - ".yar"
+    - ".yml"
+    - ".stix"
+    - ".txt"
+    - ".zip"
+    - ".gz"
+  vector_store_path: data/knowledge/vector_store
+  knowledge_graph_path: data/knowledge/graph
+  ioc_database_path: data/knowledge/ioc_db
+  ml_models_path: data/ml/models
+  experiments_path: data/ml/experiments
+
+# Local ML lifecycle (Prompt 11 Group D).
+ml:
+  models_dir: data/ml/models
+  experiments_dir: data/ml/experiments
+  auto_retrain: true
+  retrain_threshold: 0.1
+  test_split: 0.2
+  validation_split: 0.1
+  random_seed: 42
+  max_training_time_seconds: 300
+  cross_validation_folds: 5

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
+import pytest
+
 from dfat.core.enums import ArtefactCategory, SuspicionLevel
 from dfat.core.models.artefact import Artefact, ArtefactSet
 from dfat.forensic_engine.processing.ioc_detector import IOCMatch
@@ -101,6 +105,23 @@ def test_to_suspicion_level_thresholds() -> None:
     assert ScoringEngine._to_suspicion_level(0.45) is SuspicionLevel.MEDIUM  # noqa: SLF001
     assert ScoringEngine._to_suspicion_level(0.25) is SuspicionLevel.LOW  # noqa: SLF001
     assert ScoringEngine._to_suspicion_level(0.1) is SuspicionLevel.INFORMATIONAL  # noqa: SLF001
+
+
+def test_combine_scores_without_ml_uses_default_weights() -> None:
+    """Verify legacy 0.6/0.4 weighting when ML is unavailable."""
+    engine = ScoringEngine()
+    assert engine.combine_scores(0.0, llm_score=1.0) == pytest.approx(0.4)
+    assert engine.combine_scores(1.0, llm_score=0.0) == pytest.approx(0.6)
+    assert engine.combine_scores(0.75) == pytest.approx(0.75)
+
+
+def test_combine_scores_with_ml_uses_three_way_weights() -> None:
+    """Verify ML-enabled scoring uses 0.5/0.3/0.2 weighting."""
+    predictor = MagicMock()
+    predictor.has_trained_models.return_value = True
+    engine = ScoringEngine(ml_predictor=predictor)
+    final = engine.combine_scores(rule_score=1.0, llm_score=0.0, ml_score=0.0)
+    assert final == pytest.approx(0.5)
 
 
 def test_score_clamps_to_unit_interval() -> None:

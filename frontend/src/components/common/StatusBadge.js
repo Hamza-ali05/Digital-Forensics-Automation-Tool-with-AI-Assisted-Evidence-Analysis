@@ -3,7 +3,10 @@ import { Badge } from "@themesberg/react-bootstrap";
 
 import {
   CASE_STATUS_COLOURS,
+  DATASET_STATUS_COLOURS,
   EVIDENCE_STATUS_COLOURS,
+  INDEXING_STATUS_COLOURS,
+  ML_EXPERIMENT_STATUS_COLOURS,
   PIPELINE_STATUS_COLOURS,
   SUSPICION_COLOURS,
 } from "utils/constants";
@@ -13,6 +16,9 @@ const COLOUR_MAPS = {
   evidence: EVIDENCE_STATUS_COLOURS,
   pipeline: PIPELINE_STATUS_COLOURS,
   suspicion: SUSPICION_COLOURS,
+  dataset: DATASET_STATUS_COLOURS,
+  indexing: INDEXING_STATUS_COLOURS,
+  ml_experiment: ML_EXPERIMENT_STATUS_COLOURS,
 };
 
 function hexToRgb(hex) {

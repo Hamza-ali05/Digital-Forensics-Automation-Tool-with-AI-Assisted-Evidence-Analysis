@@ -1,4 +1,4 @@
-.PHONY: install install-dev install-forensic test test-unit test-integration test-integration-full test-all test-cov test-coverage test-coverage-check lint format type-check clean run-api run-pipeline db-init db-migrate db-upgrade db-downgrade db-current db-history db-optimize test-auth test-database test-services test-middleware test-backend test-integration-auth test-cases test-evidence-mgmt test-prompt3 test-parsers test-pipeline test-processing test-prompt4 test-ai test-prompt5 test-reporting test-evaluation test-prompt6 test-contract test-validation test-regression test-full-suite frontend-install frontend-start frontend-build frontend-test frontend-test-pages frontend-test-coverage frontend-lint e2e-test e2e-test-headed e2e-test-report test-accessibility test-responsive all dev-start dev-backend dev-frontend smoke-test seed-dev dev-setup test-performance test-api-performance test-ai-performance test-ai-quality security-scan test-security production-check production-check-quick docker-build docker-up docker-down project-stats
+.PHONY: install install-dev install-forensic test test-unit test-integration test-integration-full test-all test-cov test-coverage test-coverage-check lint format type-check clean run-api run-pipeline db-init db-migrate db-upgrade db-downgrade db-current db-history db-optimize test-auth test-database test-services test-middleware test-backend test-integration-auth test-cases test-evidence-mgmt test-prompt3 test-parsers test-pipeline test-processing test-prompt4 test-ai test-prompt5 test-reporting test-evaluation test-prompt6 test-contract test-validation test-regression test-full-suite test-datasets test-knowledge test-ml test-threat-intel test-prompt11 test-boot test-intelligence-integration test-prompt12 verify-system-init frontend-install frontend-start frontend-build frontend-test frontend-test-pages frontend-test-coverage frontend-lint e2e-test e2e-test-headed e2e-test-report test-accessibility test-responsive all dev-start dev-backend dev-frontend smoke-test seed-dev dev-setup test-performance test-api-performance test-ai-performance test-ai-quality security-scan test-security production-check production-check-quick docker-build docker-up docker-down project-stats
 
 ALEMBIC := alembic -c src/dfat/database/migrations/alembic.ini
 export PYTHONPATH := src$(if $(PYTHONPATH),:$(PYTHONPATH),)
@@ -102,6 +102,49 @@ test-validation:
 
 test-regression:
 	pytest tests/regression/ -v
+
+test-datasets:
+	pytest tests/unit/dataset_intelligence/ tests/integration/test_dataset_pipeline.py tests/integration/test_extension_api.py -k "dataset" -v
+
+test-knowledge:
+	pytest tests/unit/knowledge/ tests/integration/test_rag_pipeline.py -v
+
+test-ml:
+	pytest tests/unit/ml/ tests/integration/test_ml_lifecycle.py -v
+
+test-threat-intel:
+	pytest tests/unit/threat_intel/ -v
+
+test-prompt11:
+	pytest tests/unit/dataset_intelligence/ tests/unit/knowledge/ tests/unit/ml/ tests/unit/threat_intel/ tests/integration/test_dataset_pipeline.py tests/integration/test_rag_pipeline.py tests/integration/test_ml_lifecycle.py tests/integration/test_extension_api.py -v
+	cd frontend && npm test -- --watchAll=false --runInBand src/__tests__/pages/DatasetDashboard.test.js src/__tests__/pages/MLDashboard.test.js
+
+test-boot:
+	pytest tests/integration/test_full_system_boot.py -v
+
+test-intelligence-integration:
+	pytest tests/integration/test_pipeline_with_intelligence.py tests/integration/test_graceful_degradation.py -v
+
+test-prompt12:
+	pytest tests/unit/bootstrap/test_config_validator.py \
+		tests/unit/bootstrap/test_directory_manager.py \
+		tests/unit/bootstrap/test_database_initializer.py \
+		tests/unit/bootstrap/test_boot_sequencer.py \
+		tests/unit/runtime/test_service_monitor.py \
+		tests/unit/runtime/test_resource_tracker.py \
+		tests/unit/runtime/test_task_manager.py \
+		tests/unit/runtime/test_recovery_manager.py \
+		tests/unit/runtime/test_shutdown_handler.py \
+		tests/integration/test_full_system_boot.py \
+		tests/integration/test_pipeline_with_intelligence.py \
+		tests/integration/test_graceful_degradation.py \
+		tests/integration/test_system_endpoints.py -v
+	cd frontend && npm test -- --watchAll=false --runInBand \
+		src/__tests__/pages/SystemStatus.test.js \
+		src/__tests__/components/StartupScreen.test.js \
+		src/__tests__/components/DegradedBanner.test.js \
+		src/__tests__/pages/TaskMonitor.test.js \
+		src/__tests__/pages/CapabilityDashboard.test.js
 
 test-full-suite:
 	@bash scripts/run_full_test_suite.sh 2>/dev/null || python scripts/run_full_test_suite.py
@@ -264,5 +307,44 @@ docker-down:
 
 project-stats:
 	python scripts/generate_project_stats.py
+
+deploy-build:
+	docker compose -f deploy/docker-compose.production.yml build
+
+deploy-up:
+	docker compose -f deploy/docker-compose.production.yml up -d
+
+deploy-down:
+	docker compose -f deploy/docker-compose.production.yml down
+
+deploy-logs:
+	docker compose -f deploy/docker-compose.production.yml logs -f
+
+deploy-backup:
+	bash deploy/scripts/backup.sh
+
+deploy-restore:
+	bash deploy/scripts/restore.sh $(ARCHIVE)
+
+verify-rqs:
+	python scripts/verify_research_objectives.py
+
+verify-system-init:
+	python scripts/verify_system_initialization.py
+
+verify-dataset-intelligence:
+	python scripts/verify_dataset_intelligence.py
+
+verify-features:
+	python scripts/verify_features.py
+
+verify-dsr:
+	python scripts/verify_dsr_methodology.py
+
+final-verify:
+	bash scripts/final_verification.sh
+
+test-report:
+	python scripts/generate_test_report.py
 
 all: format lint type-check test

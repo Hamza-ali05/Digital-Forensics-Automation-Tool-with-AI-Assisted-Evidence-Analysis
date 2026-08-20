@@ -1,190 +1,302 @@
 # DFAT System Architecture
 
-DFAT (Digital Forensics Automation Tool with AI-Assisted Evidence Analysis) is a
-local-first, five-stage forensic processing system. It is an MSc Cybersecurity
-research artefact at Canterbury Christ Church University (CCCU), built under
-Design Science Research (DSR) constraints: evaluability, reproducibility, and
-chain-of-custody accountability over cloud scale.
+DFAT (Digital Forensics Automation Tool with AI-Assisted Evidence Analysis) is a local-first digital-forensics platform developed as an MSc Cybersecurity research artefact at Canterbury Christ Church University. The architecture is organized around a five-stage forensic pipeline, a layered service design, explicit chain-of-custody controls, and a local-only AI analysis subsystem.
 
-Related documents:
+Related architecture documents:
 
 - Pipeline internals: [`PIPELINE.md`](PIPELINE.md)
 - AI engine: [`AI_ENGINE.md`](AI_ENGINE.md)
 - Reporting: [`REPORTING.md`](REPORTING.md)
 - Evaluation: [`EVALUATION.md`](EVALUATION.md)
-- ADRs: [`adr/README.md`](adr/README.md)
+- ADR index: [`adr/README.md`](adr/README.md)
+- Component catalogue: [`COMPONENT_CATALOGUE.md`](COMPONENT_CATALOGUE.md)
 
-## System overview
+## System Overview
 
 ```text
-                         ┌─────────────────────────────────────────┐
-                         │         Investigator workstation        │
-                         │  Browser ──▶ React UI (:3000)           │
-                         └──────────────────┬──────────────────────┘
-                                            │ HTTP /api/v1
-                                            ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ FastAPI presentation layer (:8000)                                       │
-│  Auth · Cases · Evidence · Pipeline · AI · Reports · Evaluation · Health │
-│  JWT + RBAC · audit middleware · rate limit · security headers           │
-└──────────────────┬───────────────────────────────┬───────────────────────┘
-                   │                               │
-                   ▼                               ▼
-┌────────────────────────────────┐   ┌─────────────────────────────────────┐
-│ Application services           │   │ Five-stage pipeline orchestrator    │
-│ Case / Evidence / Analysis /   │   │ acquisition → parsing → ai_triage   │
-│ Report / Evaluation / User     │   │ → reporting → evaluation            │
-└────────────────┬───────────────┘   └──────────────────┬──────────────────┘
-                 │                                      │
-                 ▼                                      ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Domain (src/dfat/core) — models, enums, ports, exceptions                │
-└──────────────────────────────────────────────────────────────────────────┘
-                 │
-     ┌───────────┼───────────────┬──────────────────┐
-     ▼           ▼               ▼                  ▼
-┌─────────┐ ┌─────────┐ ┌─────────────────┐ ┌────────────────┐
-│ SQLite /│ │ Local   │ │ Ollama (local   │ │ File storage   │
-│ Postgres│ │ audit   │ │ LLaMA-3 only)   │ │ evidence +     │
-│ metadata│ │ JSONL   │ │ :11434          │ │ reports        │
-└─────────┘ └─────────┘ └─────────────────┘ └────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Investigator / Administrator Workstation                                           │
+│  Browser -> React UI -> Dashboard / Cases / Evidence / Pipeline / AI / Reports    │
+└──────────────────────────────────────┬──────────────────────────────────────────────┘
+                                       │ HTTP(S) /api/v1
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Presentation Layer                                                                 │
+│  FastAPI routes · Pydantic DTOs · auth middleware · validation · monitoring        │
+│  Modules: src/dfat/api/, frontend/src/pages/                                       │
+└───────────────────────┬───────────────────────────────┬─────────────────────────────┘
+                        │                               │
+                        ▼                               ▼
+┌──────────────────────────────────┐   ┌─────────────────────────────────────────────┐
+│ Application Layer                │   │ Five-Stage Pipeline                         │
+│ Services · DI container · RBAC   │   │ Acquisition -> Parsing -> AI Triage ->     │
+│ Case/Evidence/Analysis/Report    │   │ Reporting -> Evaluation                     │
+│ Evaluation/User/Audit services   │   │ JobManager · JobRunner · StageRegistry      │
+└──────────────────┬───────────────┘   └──────────────────────┬──────────────────────┘
+                   │                                          │
+                   ▼                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Domain Layer                                                                       │
+│  Models · enums · repository/parser/analyzer/evaluator/reporter interfaces         │
+│  ArtefactSet · CaseMetadata · BenchmarkResult · UsabilityResponse                  │
+└───────────────────────┬─────────────────────────────────────────────────────────────┘
+                        │ adapters
+                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Infrastructure + Engines                                                           │
+│  Forensic engine · AI engine · reporting engine · evaluation engine                │
+│  SQLAlchemy repositories · LocalFileStorage · SecureStorage · Audit logger         │
+│  Ollama client · JSON exporter · narrative assembler · benchmark comparator        │
+└──────────────┬───────────────────────────┬──────────────────────┬───────────────────┘
+               │                           │                      │
+               ▼                           ▼                      ▼
+       ┌───────────────┐          ┌────────────────┐     ┌────────────────────┐
+       │ SQLite /      │          │ Evidence /     │     │ Ollama local LLM   │
+       │ PostgreSQL    │          │ Report storage │     │ llama3 via :11434  │
+       │ metadata DB   │          │ on local disk  │     │ local-only         │
+       └───────────────┘          └────────────────┘     └────────────────────┘
 ```
 
-Evidence **files** stay on disk. The database stores metadata, users, jobs,
-artefacts, reports, and audit rows — never raw forensic blobs.
+Evidence files remain on disk; the database stores metadata, jobs, users, audit entries, benchmark results, and report references rather than raw forensic blobs.
 
-## Five-stage pipeline
+## Technology Stack
 
-Jobs are submitted asynchronously (`POST /api/v1/pipeline/run`, HTTP 202).
-Stages implement `IPipelineStage` and share a `PipelineContext`. Enum values
-live on `PipelineStage` in `src/dfat/core/enums.py`.
+| Area | Technology |
+|------|------------|
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic 2.0 |
+| Frontend | React 17+, React Bootstrap, Volt Dashboard, Chart.js |
+| Forensics | pytsk3, python-registry, Volatility3, python-evtx |
+| AI | LLaMA-3 via Ollama (local only) |
+| Database | SQLite (development) / PostgreSQL (production option) |
+| Auth | JWT, RBAC, password hashing |
+| Reports | JSON, narrative, PDF, HTML |
+| Testing | pytest, Jest, Playwright |
+| Packaging / Ops | Docker, Nginx, GitHub Actions |
+
+## Five-Stage Pipeline
+
+The DFAT core workflow is a five-stage pipeline coordinated by `PipelineOrchestrator` and executed through `JobManager`, `JobRunner`, and stage-specific classes in `src/dfat/pipeline/stages/`.
+
+### Stage 1 — Acquisition
+
+- **Input:** evidence identifier, file path, case metadata
+- **Output:** loaded `EvidenceImage` plus verified integrity metadata
+- **Components:** `DiskImageHandler`, `MemoryDumpHandler`, `IntegrityChecker`, `ChainOfCustodyService`
+- **Responsibility:** load evidence, verify hashes, register custody events, prepare inputs for parsing
+
+### Stage 2 — Parsing
+
+- **Input:** acquired evidence image or memory dump
+- **Output:** parser-specific `ArtefactSet` objects merged into one normalized `ArtefactSet`
+- **Components:** `ParserRegistry`, `ForensicOrchestrator`, `ArtefactNormalizer`, parser modules in `src/dfat/forensic_engine/parsers/`
+- **Responsibility:** route by evidence type, extract artefacts, normalize heterogeneous parser outputs
+
+### Stage 3 — AI Triage
+
+- **Input:** normalized artefact set
+- **Output:** scored, ranked, classified artefacts plus optional AI summary metadata
+- **Components:** `IOCDetector`, `ArtefactCorrelator`, `TimelineGenerator`, `ScoringEngine`, `RuleBasedTriageEngine`, `LocalLLMClient`, `RuleBasedAnalyzer`
+- **Responsibility:** correlate artefacts, detect indicators, compute suspicion levels, enrich results with local LLM when available
+
+### Stage 4 — Reporting
+
+- **Input:** ranked artefacts, case metadata, stage timings, AI metadata
+- **Output:** structured JSON report and narrative report
+- **Components:** `StructuredJSONExporter`, `NarrativeAssembler`, `DualOutputReportBuilder`, `PDFReportExporter`, `HTMLReportExporter`
+- **Responsibility:** generate evidential JSON, produce advisory narrative, preserve reproducibility metadata, support export
+
+### Stage 5 — Evaluation
+
+- **Input:** recovered artefacts, ground truth, pipeline timing data
+- **Output:** `BenchmarkResult`, performance report, usability-analysis outputs where applicable
+- **Components:** `GroundTruthLoader`, `MetricsCalculator`, `BenchmarkComparator`, `PerformanceAnalyzer`, `QuestionnaireInstrument`, `ResponseAnalyzer`
+- **Responsibility:** measure artefact-recovery accuracy, time-to-triage, and investigator usability
+
+## Data Flow Diagram
 
 ```text
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│ 1.Acquire   │──▶│ 2.Parsing   │──▶│ 3.AI Triage │──▶│ 4.Reporting │──▶│ 5.Evaluate  │
-│ acquisition │   │ parsing     │   │ ai_triage   │   │ reporting   │   │ evaluation  │
-└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
-  hash + custody    disk/memory       rule-first +      JSON (primary)     DFRWS/CFReDS
-  → ACQUIRED        parsers →         optional LLM      + narrative        (non-blocking)
-                    ArtefactSet       ranked triage
+Evidence file
+  -> Acquisition
+  -> Parsing
+  -> Normalisation
+  -> Correlation
+  -> IOC Detection
+  -> Scoring
+  -> Triage
+  -> Classification
+  -> Ranking
+  -> Summarisation
+  -> JSON Export
+  -> Narrative
+  -> Report
+  -> Evaluation
 ```
 
-| Stage | Enum | Responsibility |
-|-------|------|----------------|
-| Acquisition | `acquisition` | Load evidence metadata, verify integrity hashes, advance chain-of-custody |
-| Parsing | `parsing` | Route by evidence type to registered parsers; emit a normalised `ArtefactSet` |
-| AI Triage | `ai_triage` | Correlate, timeline, IOC detect, score; **rule-based first**, local LLM when available |
-| Reporting | `reporting` | Dual-output forensic report: structured JSON (evidential) + narrative (advisory) |
-| Evaluation | `evaluation` | Optional benchmark metrics against local ground truth; failure does not abort the job |
-
-Job modes:
-
-| Mode | Stages |
-|------|--------|
-| `full` | 1 → 5 |
-| `parse-only` | Acquisition + Parsing |
-| `triage-only` | Assumes artefacts exist; runs triage (and reporting when configured) |
-
-Parsers degrade when optional forensic libraries (`pytsk3`, Volatility3, and so on)
-are missing: the job continues with remaining parsers ([ADR-014](adr/ADR-014-graceful-parser-degradation.md)).
-
-## Layer diagram
-
-Clean architecture with a strict inward dependency rule: **domain depends on
-nothing**; engines and infrastructure depend on domain ports.
+## Layered Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────┐
 │ PRESENTATION                                                            │
-│  React (CRA 3.4, Bootstrap 5) · FastAPI routes · Pydantic request/resp  │
-│  src/dfat/api/  ·  frontend/src/pages/                                  │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ DTOs, JWT, RBAC
-┌─────────────────────────────────▼───────────────────────────────────────┐
+│ React UI · FastAPI routes · API schemas · middleware                    │
+└──────────────────────────────┬───────────────────────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────────────────────┐
 │ APPLICATION                                                             │
-│  Services (Case, Evidence, Analysis, Report, Evaluation, User, Audit)   │
-│  PipelineOrchestrator · dependency-injector container                   │
-│  src/dfat/services/  ·  src/dfat/container.py  ·  src/dfat/pipeline/    │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ domain models / ports
-┌─────────────────────────────────▼───────────────────────────────────────┐
+│ Services · Pipeline orchestration · dependency injection                │
+└──────────────────────────────┬───────────────────────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────────────────────┐
 │ DOMAIN                                                                  │
-│  Artefact, Evidence, Case, ForensicReport, enums, exceptions            │
-│  Ports: IArtefactParser, IReportGenerator, IAnalyzer                    │
-│  src/dfat/core/                                                         │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ adapters
-┌─────────────────────────────────▼───────────────────────────────────────┐
-│ INFRASTRUCTURE                                                          │
-│  SQLAlchemy async repositories · Alembic · LocalFileStorage             │
-│  ForensicAuditLogger (JSONL) · Ollama HTTP client · SecureStorage       │
-│  src/dfat/database/  ·  src/dfat/infrastructure/  ·  src/dfat/auth/     │
-└─────────────────────────────────────────────────────────────────────────┘
+│ Models · enums · ports/interfaces · exceptions                          │
+└──────────────────────────────┬───────────────────────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────────────────────┐
+│ INFRASTRUCTURE / ENGINE ADAPTERS                                        │
+│ Repositories · storage · audit logging · Ollama client · exporters      │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Cross-cutting middleware (outermost → innermost on the request path):
-`RequestID` → `Compression` → `SecurityHeaders` → `RateLimiter` → CORS →
-`ResponseCache` → `AuditTrail` → `RequestValidation` → routes /
-`GlobalExceptionHandler`.
+Cross-cutting middleware order on the request path:
 
-## Technology stack
+`RequestID -> Compression -> SecurityHeaders -> RateLimiter -> CORS -> ResponseCache -> AuditTrail -> RequestValidation -> routes -> GlobalExceptionHandler`
 
-| Layer | Technology |
-|-------|------------|
-| Language | Python 3.11+ (backend), Node.js 18+ (frontend) |
-| HTTP API | FastAPI, Uvicorn, Pydantic v2 |
-| Auth | JWT (HS256), Argon2/passlib, local RBAC (`admin`, `investigator`, `analyst`, `viewer`) |
-| Persistence | SQLAlchemy 2 async, Alembic; SQLite (`aiosqlite`) default, PostgreSQL (`asyncpg`) optional |
-| DI | `dependency-injector` (`ApplicationContainer`) |
-| Config | YAML (`config/default.yaml` + `{env}.yaml`) overlayed by `DFAT_*` env vars |
-| Pipeline | `PipelineOrchestrator`, five `IPipelineStage` implementations |
-| Parsers | pytsk3, python-registry, python-evtx, Volatility3 (all optional) |
-| AI | Local Ollama HTTP API, default model `llama3` — no cloud inference |
-| Reports | Dual JSON + narrative; exporters for JSON file, HTML (Jinja2), PDF (ReportLab) |
-| Frontend | React 16, React Router 5, Bootstrap 5 / Themesberg Volt, Axios |
-| Tests | pytest (unit / integration / contract / security / validation / regression), Jest, Playwright |
-| Packaging | `pyproject.toml` extras: `dev`, `forensic`, `auth`, `reporting`, `production` |
+## Component Catalogue
 
-## Roles and permissions
+The complete catalogue is maintained in [`COMPONENT_CATALOGUE.md`](COMPONENT_CATALOGUE.md). The table below lists the principal architectural anchors.
 
-| Role | Cases | Evidence | Analysis / pipeline / AI | Reports | Evaluation | Users / system |
-|------|-------|----------|--------------------------|---------|------------|----------------|
-| `admin` | full | full | full | full | full | full |
-| `investigator` | create / read / update | full | create / read | create / read | create / read | — |
-| `analyst` | read | read | create / read | read | read | — |
-| `viewer` | — | — | — | read | read | — |
+| Class / Component | Module | Prompt of Origin | Interface / Role |
+|------------------|--------|------------------|------------------|
+| `ApplicationContainer` | `src/dfat/container.py` | 1-3 | DI composition root |
+| `ParserRegistry` | `src/dfat/pipeline/parser_registry.py` | 4 | parser registry / `IArtefactParser` consumer |
+| `ForensicOrchestrator` | `src/dfat/forensic_engine/orchestrator.py` | 4 | evidence routing + parser execution |
+| `ArtefactNormalizer` | `src/dfat/forensic_engine/normalizer.py` | 4 | normalized `ArtefactSet` producer |
+| `PipelineOrchestrator` | `src/dfat/pipeline/__init__.py` / `orchestrator` | 4 | pipeline coordinator |
+| `LocalLLMClient` | `src/dfat/ai_engine/analyzer.py` | 5 | AI analysis client |
+| `LLMConnectionManager` | `src/dfat/ai_engine/llm/connection.py` | 5 | local-only Ollama enforcement |
+| `HallucinationGuard` | `src/dfat/ai_engine/validation/hallucination_guard.py` | 5 | hallucination mitigation |
+| `RuleBasedAnalyzer` | `src/dfat/ai_engine/fallback/rule_based.py` | 5 | fallback analyzer / `IArtefactAnalyzer` |
+| `StructuredJSONExporter` | `src/dfat/reporting/json_layer.py` | 6 | evidential JSON exporter |
+| `NarrativeAssembler` | `src/dfat/reporting/narrative.py` | 6 | advisory narrative assembler |
+| `DualOutputReportBuilder` | `src/dfat/reporting/report_builder.py` | 6 | report generation / `IReportGenerator` |
+| `GroundTruthLoader` | `src/dfat/evaluation/benchmark/ground_truth.py` | 6 | benchmark dataset loader |
+| `MetricsCalculator` | `src/dfat/evaluation/benchmark/metrics.py` | 6 | benchmark metrics |
+| `BenchmarkComparator` | `src/dfat/evaluation/benchmark/comparator.py` | 6 | TP/FP/FN comparison |
+| `QuestionnaireInstrument` | `src/dfat/evaluation/usability/questionnaire.py` | 6 | usability instrument |
+| `ResponseAnalyzer` | `src/dfat/evaluation/usability/response_analyzer.py` | 6 | questionnaire analysis |
+| `ResponseCollector` | `src/dfat/evaluation/usability/response_collector.py` | 6 | anonymized response collection |
 
-Source of truth: `src/dfat/auth/rbac.py` (`ROLE_PERMISSIONS`).
+## Security Architecture
 
-## ADR index (Prompts 1–6)
+### Authentication Flow
 
-All 24 Architecture Decision Records:
+1. User authenticates via `auth` routes.
+2. Backend validates credentials and issues JWT tokens.
+3. Protected routes require authenticated user context.
+4. Role checks are enforced through RBAC dependencies.
 
-| ADR | Title | Decision in one line |
-|-----|-------|----------------------|
-| [ADR-001](adr/ADR-001-design-science-research.md) | Design Science Research Methodology | Treat DFAT as a DSR artefact: evaluability over enterprise scale |
-| [ADR-002](adr/ADR-002-local-llm-only.md) | Local LLM Only — No Cloud Inference | All inference stays on a local LLM endpoint |
-| [ADR-003](adr/ADR-003-dual-output-report.md) | Dual-Output Report Format | JSON evidential record plus human-readable narrative |
-| [ADR-004](adr/ADR-004-file-based-repositories.md) | Repository Pattern with File-Based Storage | Evidence and report files on disk behind repository ports |
-| [ADR-005](adr/ADR-005-graceful-forensic-deps.md) | Graceful Degradation on Library Absence | Optional forensic libraries must not crash the process |
-| [ADR-006](adr/ADR-006-rule-based-fallback.md) | Rule-Based Fallback Analyzer | When the LLM is down, continue with deterministic rules |
-| [ADR-007](adr/ADR-007-sqlalchemy-async-persistence.md) | SQLAlchemy Async Persistence | Async SQLAlchemy for metadata, users, jobs, and audit |
-| [ADR-008](adr/ADR-008-jwt-rbac.md) | JWT Authentication with RBAC | Local JWT + four forensic roles |
-| [ADR-009](adr/ADR-009-service-layer.md) | Service Layer Pattern | Application services sit between routes and repositories |
-| [ADR-010](adr/ADR-010-case-lifecycle-management.md) | Case Lifecycle Management | Explicit case status machine with audit |
-| [ADR-011](adr/ADR-011-multi-algorithm-hashing.md) | Multi-Algorithm Hashing | SHA-256 primary with MD5 (and SHA-1 available) |
-| [ADR-012](adr/ADR-012-chain-of-custody-immutability.md) | Chain-of-Custody Immutability | Append-only custody records; never rewrite history |
-| [ADR-013](adr/ADR-013-parser-lazy-imports.md) | Lazy Forensic Library Imports | Import pytsk3 / Volatility only when a parser runs |
-| [ADR-014](adr/ADR-014-graceful-parser-degradation.md) | Graceful Parser Degradation | Unavailable parsers are skipped, not fatal |
-| [ADR-015](adr/ADR-015-artefact-raw-data-contracts.md) | Artefact `raw_data` Contracts | Category-specific dict schemas for artefacts |
-| [ADR-016](adr/ADR-016-rule-based-triage-first.md) | Rule-Based Triage First | Deterministic scoring/rules run before LLM enrichment |
-| [ADR-017](adr/017-local-llm-only.md) | Local LLM Only (Prompt 5) | Enforce localhost-only Ollama URLs in the client |
-| [ADR-018](adr/018-hallucination-mitigation.md) | Hallucination Mitigation | Validate LLM output against artefact evidence |
-| [ADR-019](adr/019-prompt-versioning.md) | Prompt Versioning | Stamp prompt version on AI analysis records |
-| [ADR-020](adr/020-rule-based-triage-primary.md) | Rule-Based Triage Primary | Rules remain the primary triage path |
-| [ADR-021](adr/021-json-layer-primary-record.md) | JSON Layer as Primary Evidential Record | Narrative is advisory; JSON is the record |
-| [ADR-022](adr/022-report-schema-versioning.md) | Report Schema Versioning | Versioned JSON schema for forensic reports |
-| [ADR-023](adr/023-questionnaire-immutability.md) | Questionnaire Instrument Immutability | Ethics-locked usability instrument cannot be edited at runtime |
-| [ADR-024](adr/024-tobin-comparability.md) | Tobin et al. Comparability | Usability metrics remain comparable to Tobin et al. |
+### RBAC Model
 
-The catalogue index is also maintained in [`adr/README.md`](adr/README.md).
+Roles implemented in the system:
+
+- `admin`
+- `investigator`
+- `analyst`
+- `viewer`
+
+Source of truth:
+- `src/dfat/auth/rbac.py`
+- `src/dfat/api/dependencies.py`
+
+### Audit Trail
+
+Auditability is a first-class architectural concern:
+
+- API middleware captures security-relevant actions
+- forensic pipeline stages emit audit events
+- evidence handling preserves chain-of-custody semantics
+- usability deletion actions are also audited for ethics compliance
+
+Key components:
+- `ForensicAuditLogger`
+- `AuditService`
+- `AuditTrailMiddleware`
+
+### Chain-of-Custody
+
+Evidence custody is treated as append-only. Registration, transfer, validation, acquisition, and quarantine actions all contribute to a traceable custody record.
+
+## Deployment Architecture
+
+### Production Topology
+
+```text
+Client Browser
+  -> Nginx reverse proxy (:80/:443)
+      -> Frontend container
+      -> Backend FastAPI container
+          -> SQLite / PostgreSQL metadata store
+          -> local evidence/report/audit volumes
+          -> Ollama container (:11434)
+```
+
+### Docker Services
+
+- `backend`
+- `frontend`
+- `nginx`
+- `ollama`
+
+### Volume Mounts
+
+- evidence data volume
+- report output volume
+- audit log volume
+- database volume
+- Ollama model volume
+
+### Operational Documents
+
+- deployment guide: `deploy/README.md`
+- production compose: `deploy/docker-compose.production.yml`
+- Nginx config: `deploy/nginx/nginx.conf`
+- backup / restore: `deploy/scripts/backup.sh`, `deploy/scripts/restore.sh`
+
+## ADR Index
+
+| ADR | Title | Prompt | Status |
+|-----|-------|--------|--------|
+| [001](adr/ADR-001-design-science-research.md) | DSR Methodology | 1 | Accepted |
+| [002](adr/ADR-002-local-llm-only.md) | Local LLM Only | 1 | Accepted |
+| [003](adr/ADR-003-dual-output-report.md) | Dual-Output Report Format | 1 | Accepted |
+| [004](adr/ADR-004-file-based-repositories.md) | Repository Pattern with File-Based Storage | 1 | Accepted |
+| [005](adr/ADR-005-graceful-forensic-deps.md) | Graceful Degradation on Library Absence | 1 | Accepted |
+| [006](adr/ADR-006-rule-based-fallback.md) | Rule-Based Fallback Analyzer | 1 | Accepted |
+| [007](adr/ADR-007-sqlalchemy-async-persistence.md) | SQLAlchemy Async Persistence | 2 | Accepted |
+| [008](adr/ADR-008-jwt-rbac.md) | JWT Authentication with RBAC | 2 | Accepted |
+| [009](adr/ADR-009-service-layer.md) | Service Layer Pattern | 2 | Accepted |
+| [010](adr/ADR-010-case-lifecycle-management.md) | Case Lifecycle Management | 3 | Accepted |
+| [011](adr/ADR-011-multi-algorithm-hashing.md) | Multi-Algorithm Hashing | 3 | Accepted |
+| [012](adr/ADR-012-chain-of-custody-immutability.md) | Chain-of-Custody Immutability | 3 | Accepted |
+| [013](adr/ADR-013-parser-lazy-imports.md) | Lazy Forensic Library Imports | 4 | Accepted |
+| [014](adr/ADR-014-graceful-parser-degradation.md) | Graceful Parser Degradation | 4 | Accepted |
+| [015](adr/ADR-015-artefact-raw-data-contracts.md) | Artefact `raw_data` Contracts | 4 | Accepted |
+| [016](adr/ADR-016-rule-based-triage-first.md) | Rule-Based Triage First | 4 | Accepted |
+| [017](adr/017-local-llm-only.md) | Local LLM Only (Prompt 5) | 5 | Accepted |
+| [018](adr/018-hallucination-mitigation.md) | Hallucination Mitigation | 5 | Accepted |
+| [019](adr/019-prompt-versioning.md) | Prompt Versioning | 5 | Accepted |
+| [020](adr/020-rule-based-triage-primary.md) | Rule-Based Triage Primary | 5 | Accepted |
+| [021](adr/021-json-layer-primary-record.md) | JSON Layer as Primary Evidential Record | 6 | Accepted |
+| [022](adr/022-report-schema-versioning.md) | Report Schema Versioning | 6 | Accepted |
+| [023](adr/023-questionnaire-immutability.md) | Questionnaire Instrument Immutability | 6 | Accepted |
+| [024](adr/024-tobin-comparability.md) | Tobin Comparability | 6 | Accepted |
+
+## Verification Cross-Reference
+
+The final architecture is supported by:
+
+- `scripts/verify_research_objectives.py`
+- `scripts/verify_features.py`
+- `scripts/verify_dsr_methodology.py`
+- `reports/research_objectives_verification.json`
+- `reports/feature_verification.json`
+- `reports/dsr_verification.json`

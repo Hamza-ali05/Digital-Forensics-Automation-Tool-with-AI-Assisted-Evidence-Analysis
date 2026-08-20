@@ -15,6 +15,9 @@ def test_health_returns_200(app_client: TestClient) -> None:
     body = response.json()
     assert body["status"] == "healthy"
     assert "version" in body
+    assert "system_readiness" in body
+    assert "degraded_services" in body
+    assert "available_capabilities" in body
 
 
 def test_ready_checks_database(app_client: TestClient) -> None:
@@ -28,6 +31,9 @@ def test_ready_checks_database(app_client: TestClient) -> None:
     assert "checks" in body
     assert body["checks"]["database"] is True
     assert body["status"] in {"ready", "degraded"}
+    assert "system_readiness" in body
+    assert "services" in body
+    assert isinstance(body["services"], dict)
 
 
 def test_detailed_requires_admin(app_client: TestClient) -> None:

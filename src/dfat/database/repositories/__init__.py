@@ -5,6 +5,7 @@ from dfat.database.repositories.audit_repo import SQLAlchemyAuditRepository
 from dfat.database.repositories.base_repo import SQLAlchemyRepository
 from dfat.database.repositories.case_repo import SQLAlchemyCaseRepository
 from dfat.database.repositories.custody_repo import CustodyRepository
+from dfat.database.repositories.dataset_repo import DatasetRepository
 from dfat.database.repositories.evaluation_repo import (
     SQLAlchemyBenchmarkRepository,
     SQLAlchemyUsabilityRepository,
@@ -21,6 +22,7 @@ from dfat.database.repositories.user_repo import SQLAlchemyUserRepository
 
 __all__ = [
     "CustodyRepository",
+    "DatasetRepository",
     "EvidenceMetadataRepository",
     "EvidenceStatusRepository",
     "SQLAlchemyArtefactRepository",

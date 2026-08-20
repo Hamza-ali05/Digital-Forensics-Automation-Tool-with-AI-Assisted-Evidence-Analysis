@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +14,16 @@ from dfat.forensic_engine.parsers.utils import convert_timestamp
 from dfat.forensic_engine.processing.ioc_detector import IOCMatch
 from dfat.forensic_engine.processing.relationship_mapper import RelationshipMap
 
+if TYPE_CHECKING:
+    from dfat.ml.predictor import MLPredictor
+
 logger = logging.getLogger(__name__)
+
+_RULE_WEIGHT_DEFAULT = 0.6
+_LLM_WEIGHT_DEFAULT = 0.4
+_RULE_WEIGHT_ML = 0.5
+_LLM_WEIGHT_ML = 0.3
+_ML_WEIGHT = 0.2
 
 _IOC_WEIGHTS: dict[str, float] = {
     "high": 0.3,
@@ -74,6 +84,65 @@ class ScoredArtefact(BaseModel):
 
 class ScoringEngine:
     """Assign numerical suspicion scores from IOCs, correlations, and heuristics."""
+
+    def __init__(self, ml_predictor: Optional[MLPredictor] = None) -> None:
+        """Initialise the scoring engine.
+
+        Args:
+            ml_predictor: Optional ML inference service. When trained models exist,
+                final scores merge rule, LLM, and ML components with dedicated weights.
+        """
+        self._ml_predictor = ml_predictor
+
+    def ml_enabled(self) -> bool:
+        """Return whether trained ML models are available for score augmentation."""
+        if self._ml_predictor is None:
+            return False
+        return self._ml_predictor.has_trained_models()
+
+    def combine_scores(
+        self,
+        rule_score: float,
+        llm_score: Optional[float] = None,
+        ml_score: Optional[float] = None,
+    ) -> float:
+        """Merge rule, LLM, and optional ML scores into a final value in ``[0, 1]``.
+
+        When ML models are unavailable, uses ``0.6 * rule + 0.4 * llm`` when both
+        components are present. When ML is available and ``ml_score`` is provided,
+        uses ``0.5 * rule + 0.3 * llm + 0.2 * ml``.
+        """
+        rule = max(0.0, min(1.0, float(rule_score)))
+        llm = None if llm_score is None else max(0.0, min(1.0, float(llm_score)))
+        ml = None if ml_score is None else max(0.0, min(1.0, float(ml_score)))
+
+        if self.ml_enabled() and ml is not None:
+            if llm is not None:
+                final = (_RULE_WEIGHT_ML * rule) + (_LLM_WEIGHT_ML * llm) + (_ML_WEIGHT * ml)
+            else:
+                final = (_RULE_WEIGHT_ML * rule) + (_ML_WEIGHT * ml)
+            return max(0.0, min(1.0, final))
+
+        if llm is not None:
+            final = (_LLM_WEIGHT_DEFAULT * llm) + (_RULE_WEIGHT_DEFAULT * rule)
+            return max(0.0, min(1.0, final))
+        return rule
+
+    async def ml_score_for(self, artefact: Artefact) -> Optional[float]:
+        """Return an ML suspicion score for ``artefact`` when models are trained."""
+        if not self.ml_enabled() or self._ml_predictor is None:
+            return None
+        return await self._ml_predictor.score_artefact(artefact)
+
+    async def combine_with_ml(
+        self,
+        rule_score: float,
+        artefact: Artefact,
+        llm_score: Optional[float] = None,
+    ) -> float:
+        """Merge rule and LLM scores with an on-demand ML score for ``artefact``."""
+        ml_score = await self.ml_score_for(artefact)
+        return self.combine_scores(rule_score, llm_score=llm_score, ml_score=ml_score)
 
     def score(
         self,

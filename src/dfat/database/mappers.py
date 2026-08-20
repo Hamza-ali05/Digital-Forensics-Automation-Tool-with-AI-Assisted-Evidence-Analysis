@@ -7,6 +7,7 @@ database dependencies.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -28,6 +29,7 @@ from dfat.database.models.artefact_orm import ArtefactRecordORM
 from dfat.database.models.audit_orm import AuditLogRecordORM
 from dfat.database.models.case_orm import CaseInvestigatorORM, CaseORM
 from dfat.database.models.custody_orm import ChainOfCustodyORM
+from dfat.database.models.dataset_orm import DatasetRecordORM
 from dfat.database.models.evaluation_orm import BenchmarkRecordORM, UsabilityRecordORM
 from dfat.database.models.evidence_orm import EvidenceRecordORM
 from dfat.database.models.evidence_status_orm import (
@@ -41,6 +43,13 @@ from dfat.evidence_management.models import (
     EvidenceStatusChange,
     HashSet,
 )
+from dfat.dataset_intelligence.enums import (
+    DatasetCategory,
+    DatasetFormat,
+    DatasetStatus,
+    IndexingStatus,
+)
+from dfat.dataset_intelligence.models import DatasetRecord
 
 def _dumps(payload: Any) -> str:
     """Serialise a JSON-compatible payload to a text column value."""
@@ -649,4 +658,74 @@ def evidence_status_domain_to_orm(
         changed_by_user_id=domain.changed_by_user_id,
         changed_at=domain.changed_at,
         reason=domain.reason,
+    )
+
+
+def dataset_orm_to_domain(orm: DatasetRecordORM) -> DatasetRecord:
+    """Convert a dataset ORM row to domain ``DatasetRecord``."""
+    return DatasetRecord(
+        dataset_id=orm.dataset_id,
+        name=orm.name,
+        file_path=Path(orm.file_path),
+        category=DatasetCategory(orm.category),
+        format=DatasetFormat(orm.format),
+        status=DatasetStatus(orm.status),
+        file_size_bytes=orm.file_size_bytes,
+        hash_sha256=orm.hash_sha256,
+        mime_type=orm.mime_type,
+        discovered_at=orm.discovered_at,
+        validated_at=orm.validated_at,
+        indexed_at=orm.indexed_at,
+        parent_directory=orm.parent_directory,
+        is_nested=orm.is_nested,
+        nested_depth=orm.nested_depth,
+        metadata=_loads(orm.metadata_json, default={}),
+        tags=list(_loads(orm.tags_json, default=[]) or []),
+        associated_research_objectives=list(
+            _loads(orm.associated_research_objectives_json, default=[]) or []
+        ),
+        supported_forensic_modules=list(
+            _loads(orm.supported_forensic_modules_json, default=[]) or []
+        ),
+        indexing_status=IndexingStatus(orm.indexing_status),
+        preprocessing_history=list(_loads(orm.preprocessing_history_json, default=[]) or []),
+        update_history=list(_loads(orm.update_history_json, default=[]) or []),
+    )
+
+
+def dataset_domain_to_orm(domain: DatasetRecord) -> DatasetRecordORM:
+    """Convert domain ``DatasetRecord`` to a dataset ORM row."""
+    metadata = dict(domain.metadata)
+    deleted_at_raw = metadata.get("deleted_at")
+    last_seen_raw = metadata.get("last_seen_at")
+    file_modified_raw = metadata.get("file_modified_at")
+    return DatasetRecordORM(
+        dataset_id=domain.dataset_id,
+        name=domain.name,
+        file_path=str(domain.file_path),
+        category=domain.category.value,
+        format=domain.format.value,
+        status=domain.status.value,
+        file_size_bytes=domain.file_size_bytes,
+        hash_sha256=domain.hash_sha256,
+        mime_type=domain.mime_type,
+        discovered_at=domain.discovered_at,
+        validated_at=domain.validated_at,
+        indexed_at=domain.indexed_at,
+        parent_directory=domain.parent_directory,
+        is_nested=domain.is_nested,
+        nested_depth=domain.nested_depth,
+        metadata_json=_dumps(domain.metadata),
+        tags_json=_dumps(domain.tags),
+        associated_research_objectives_json=_dumps(domain.associated_research_objectives),
+        supported_forensic_modules_json=_dumps(domain.supported_forensic_modules),
+        indexing_status=domain.indexing_status.value,
+        preprocessing_history_json=_dumps(domain.preprocessing_history),
+        update_history_json=_dumps(domain.update_history),
+        is_deleted=bool(metadata.get("is_deleted", False)),
+        deleted_at=deleted_at_raw if isinstance(deleted_at_raw, datetime) else None,
+        last_seen_at=last_seen_raw if isinstance(last_seen_raw, datetime) else None,
+        file_modified_at=(
+            file_modified_raw if isinstance(file_modified_raw, datetime) else None
+        ),
     )

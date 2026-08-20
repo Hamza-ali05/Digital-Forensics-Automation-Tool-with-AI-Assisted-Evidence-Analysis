@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -95,6 +96,15 @@ class ForensicAuditLogger:
                 handle.write("\n")
                 handle.flush()
             return entry
+
+    def flush(self) -> None:
+        """Flush the on-disk audit log buffer."""
+        with self._lock:
+            if not self._audit_log_path.exists():
+                return
+            with self._audit_log_path.open("a", encoding="utf-8") as handle:
+                handle.flush()
+                os.fsync(handle.fileno())
 
     def get_audit_trail(self, evidence_id: str) -> list[AuditEntry]:
         """Return all audit entries for a given evidence identifier.

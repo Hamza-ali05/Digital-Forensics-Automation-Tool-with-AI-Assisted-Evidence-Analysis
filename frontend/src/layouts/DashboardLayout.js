@@ -6,6 +6,7 @@ import Topbar from "components/layout/Topbar";
 import Footer from "components/layout/Footer";
 import LoadingSpinner from "components/common/LoadingSpinner";
 import SkipToContent from "components/common/SkipToContent";
+import DegradedBanner from "components/common/DegradedBanner";
 
 /**
  * Main authenticated shell: Sidebar + Topbar + content + Footer.
@@ -35,6 +36,7 @@ export default function DashboardLayout({ children }) {
       <Sidebar show={sidebarOpen} onClose={closeSidebar} onToggle={toggleSidebar} />
       <main id="main-content" className="content" tabIndex={-1}>
         <Topbar onToggleSidebar={toggleSidebar} />
+        <DegradedBanner />
         <Container fluid className="px-0">
           {children}
         </Container>

@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from dfat.core.enums import HashAlgorithm
+from dfat.dataset_intelligence.config import DatasetIntelligenceSettings
+from dfat.ml.config import MLSettings
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "config"
@@ -52,6 +54,7 @@ class AIEngineSettings(BaseModel):
     cache_responses: bool = True
     cache_ttl_seconds: int = 3600
     max_input_artefacts: int = 500
+    use_rag: bool = True
 
 
 class ReportingSettings(BaseModel):
@@ -172,6 +175,10 @@ class DFATSettings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    dataset_intelligence: DatasetIntelligenceSettings = Field(
+        default_factory=DatasetIntelligenceSettings
+    )
+    ml: MLSettings = Field(default_factory=MLSettings)
 
 
 def _load_yaml_file(path: Path) -> dict[str, Any]:

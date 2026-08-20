@@ -1,335 +1,644 @@
 # DFAT User Manual
 
-This manual covers every investigator-facing feature in the DFAT web UI
-(version 0.1.0). API equivalents are in
-[API_REFERENCE.md](../development/API_REFERENCE.md). Getting started:
-[QUICKSTART.md](QUICKSTART.md).
+**Digital Forensics Automation Tool with AI-Assisted Evidence Analysis**
 
-The UI is a React application at http://127.0.0.1:3000. Most pages require a
-JWT session. Roles: **admin**, **investigator**, **analyst**, **viewer**.
-
-## Sign in and account
-
-| Page | Path | Who |
-|------|------|-----|
-| Login | `/auth/login` | Guests |
-| Register | `/auth/register` | Guests (creates an account only if the API allows it; production registration is admin/investigator via the API) |
-| Profile | `/profile` | Any authenticated user |
-| Help | `/help` | Any authenticated user |
-
-**Login.** Enter username and password. Failed attempts lock the account after
-five failures for 30 minutes (configurable). Tokens refresh in the background.
-
-**Profile.** View your username, email, role, and last login. Change password
-(current password plus a new password of at least 12 characters).
-
-**Logout.** Use the top bar. This revokes the current access token. Admins can
-force a user to sign in again by deactivating the account.
-
-## Roles at a glance
-
-| Capability | admin | investigator | analyst | viewer |
-|------------|-------|--------------|---------|--------|
-| Manage users / settings / audit | yes | no | no | no |
-| Create and transition cases | yes | yes | no | no |
-| Register / quarantine evidence | yes | yes | no | no |
-| Run pipeline and AI analysis | yes | yes | yes | no |
-| View reports and evaluation | yes | yes | yes | yes |
-| Administer usability export / delete | yes | results only | no | no |
-
-Sidebar items you cannot use are hidden. API calls still enforce RBAC.
+Version 0.1.0 | Canterbury Christ Church University | MSc Cybersecurity
 
 ---
 
-## Dashboard overview
+## Table of Contents
 
-Path: `/dashboard`. All authenticated roles.
-
-The dashboard summarises operational health and recent work:
-
-- **Stat cards** — case counts, evidence totals, pipeline jobs, reports.
-- **Charts** — evidence by type/status and job status distribution when data exists.
-- **Health bar** — readiness of database, local LLM, storage, pipeline, and audit
-  logging (`GET /api/v1/health/ready`).
-- **Shortcuts** — cases, evidence register, pipeline run, reports.
-
-If you are a **viewer**, some cards stay empty because case and evidence APIs
-are not in your permission set. Use **Reports** as the primary workspace.
+1. [Getting Started](#chapter-1--getting-started)
+2. [Case Management](#chapter-2--case-management)
+3. [Evidence Management](#chapter-3--evidence-management)
+4. [Running the Forensic Pipeline](#chapter-4--running-the-forensic-pipeline)
+5. [Exploring Artefacts](#chapter-5--exploring-artefacts)
+6. [AI-Assisted Analysis](#chapter-6--ai-assisted-analysis)
+7. [Reports](#chapter-7--reports)
+8. [Benchmark Evaluation](#chapter-8--benchmark-evaluation)
+9. [Usability Questionnaire](#chapter-9--usability-questionnaire)
+10. [Administration](#chapter-10--administration)
 
 ---
 
-## Case management workflow
+## Chapter 1 — Getting Started
 
-Paths: `/cases`, `/cases/new`, `/cases/:id`.
+### 1.1 Logging In
 
-Roles: list — admin, investigator, analyst; create and lifecycle — admin,
-investigator.
+Navigate to the DFAT web interface (default: `http://localhost:3000`). You will see the login page.
 
-### List and filter
+1. Enter your **username** and **password**.
+2. Click **Login**.
+3. On first use, the default admin account is available (credentials provided by your administrator).
 
-**Cases** shows name, status, evidence count, and timestamps. Filter by status
-or search by name. Open a row for the case detail page.
+New users can be created by an admin via the User Management page, or via the **Register** page if self-registration is enabled.
 
-### Create
+### 1.2 Dashboard Overview
 
-**New Case** requires a case name (1–255 characters) and optional description.
-The new case is `created`. The creator is typically the lead investigator.
+After login, you land on the **Dashboard** page, which displays:
 
-### Lifecycle
+- **Active Cases** — count of open investigations
+- **Total Evidence** — registered evidence items
+- **Pipeline Jobs** — recent and running analysis jobs
+- **Quick Actions** — buttons to create a case, register evidence, or start a pipeline run
+- **Recent Activity** — timeline of recent system events
 
-Allowed transitions:
+### 1.3 Understanding Your Role
 
-```text
-created → open → active → under_review → closed → archived
-                ↘              ↗
-                 └──── close ──┘   (from open or active)
-under_review → active   (reopen, reason required)
+DFAT uses role-based access control (RBAC) with four roles:
+
+| Role | Permissions |
+|------|------------|
+| **Admin** | Full access: user management, system settings, audit logs, all cases |
+| **Investigator** | Create/manage cases, register evidence, run pipelines, view reports |
+| **Analyst** | View assigned cases, run AI analysis, view artefacts and reports |
+| **Viewer** | Read-only access to cases and reports assigned to them |
+
+Your role determines which navigation items and actions are available.
+
+### 1.4 Navigation Guide
+
+The sidebar navigation provides access to all sections:
+
+- **Dashboard** — overview and quick actions
+- **Cases** — investigation case management
+- **Evidence** — evidence registration and inventory
+- **Pipeline** — forensic analysis pipeline
+- **Artefacts** — artefact explorer, timeline, IOC dashboard
+- **AI Analysis** — AI-assisted classification and Q&A
+- **Reports** — forensic report viewing and export
+- **Evaluation** — benchmark and usability evaluation
+- **Settings** — profile and system settings (admin)
+- **Help** — contextual help and documentation links
+
+---
+
+## Chapter 2 — Case Management
+
+### 2.1 Creating a New Investigation Case
+
+1. Navigate to **Cases > Create Case** or click the quick action on the Dashboard.
+2. Fill in the required fields:
+   - **Case Name** — a descriptive title (e.g., "Incident Response — Workstation 42")
+   - **Description** — details of the investigation
+   - **Case Type** — select from incident response, malware analysis, data recovery, etc.
+   - **Priority** — low, medium, high, or critical
+3. Click **Create Case**.
+
+The case is created in **draft** status.
+
+### 2.2 Assigning Investigators
+
+1. Open a case from the case list.
+2. In the **Investigators** section, click **Add Investigator**.
+3. Select a user from the list.
+4. The first investigator added is typically the lead investigator.
+
+To remove an investigator, click the remove icon next to their name.
+
+### 2.3 Case Lifecycle
+
+Cases follow a defined lifecycle:
+
+```
+Draft → Open → Active → Under Review → Closed → Archived
+                  ↑            |
+                  └── Reopen ──┘
 ```
 
-On the case detail page:
+| Transition | Action | Who |
+|-----------|--------|-----|
+| Draft → Open | Click **Open Case** | Case owner / admin |
+| Open → Active | Click **Activate** | Lead investigator |
+| Active → Under Review | Click **Submit for Review** | Lead investigator |
+| Under Review → Closed | Click **Close Case** | Admin / reviewer |
+| Closed → Archived | Click **Archive** | Admin |
+| Under Review → Active | Click **Reopen** | Admin / lead |
 
-1. **Open** — `created` → `open`. A lead investigator must be assigned.
-2. **Activate** — `open` → `active`. Required before (or alongside) processing.
-3. **Submit for review** — `active` → `under_review`.
-4. **Reopen** — `under_review` → `active`. You must give a reason.
-5. **Close** — seals linked evidence custody chains. Reason required.
-6. **Archive** — `closed` → `archived`. Terminal state.
+Each transition is recorded in the audit trail.
 
-### Investigators and evidence
+### 2.4 Viewing Case Summary
 
-- Assign investigators as **lead** or **member**.
-- Remove a member (soft-remove) from the investigators list.
-- Link existing evidence IDs to the case, or register new evidence from the
-  evidence workflow (preferred).
+The **Case Summary** page shows:
 
-The **summary** tab aggregates investigators, evidence items, and notes.
+- Case metadata (name, type, priority, status, dates)
+- Assigned investigators
+- Linked evidence items
+- Pipeline runs and their status
+- Activity log with timestamped events
 
----
+### 2.5 Linking Evidence to a Case
 
-## Evidence management workflow
-
-Paths: `/evidence`, `/evidence/register`, `/evidence/integrity`, `/evidence/:id`.
-
-### Inventory
-
-**Evidence** lists registered items: file name, type (`disk_image` /
-`memory_dump`), status, hashes, size, custody action count. Filter by case.
-
-Statuses: `registered` → `validating` → `validated` → `processing` →
-`processed` → `archived`. **Quarantined** is an operational hold.
-
-### Register
-
-**Register evidence** (`/evidence/register`):
-
-1. Select an **open** or **active** case.
-2. Enter the **server file path** (the API process must be able to read it).
-3. Choose type and optional description.
-4. Submit. DFAT computes hashes (SHA-256 primary, MD5 also stored), records an
-   **acquired** custody action, and runs validation (size, MIME, format).
-
-Do not use `..` in paths. Maximum size is configured (`max_evidence_size_gb`,
-default 100).
-
-A legacy API (`POST /api/v1/evidence`) still accepts `case_name` +
-`investigator` for older clients; the UI uses `/evidence/register`.
-
-### Detail, validate, quarantine
-
-On **Evidence detail**:
-
-- Re-run **validate**.
-- View **status history**.
-- View the **chain of custody** (append-only: acquired, accessed, analysed,
-  transferred, released, sealed).
-- **Quarantine** with a reason (investigator/admin). Quarantined evidence
-  cannot be processed until it is returned to a processable state.
-
-### Integrity check
-
-**Integrity** (`/evidence/integrity`) re-hashes the file and compares stored
-hashes. A match records an **accessed** custody action. Mismatches are flagged
-as discrepancies — treat the item as compromised and quarantine it.
+1. Open the case detail page.
+2. Click **Link Evidence**.
+3. Select from registered evidence items.
+4. The evidence is now associated with the case and visible in the case summary.
 
 ---
 
-## Pipeline execution
+## Chapter 3 — Evidence Management
 
-Paths: `/pipeline`, `/pipeline/run`, `/pipeline/:jobId`.
+### 3.1 Registering Forensic Evidence
 
-Roles: admin, investigator, analyst.
+Evidence files (disk images, memory dumps) must be placed in the configured evidence directory before registration.
 
-### Submit a job
+1. Navigate to **Evidence > Register Evidence**.
+2. Fill in:
+   - **Name** — descriptive name (e.g., "workstation-42-disk.dd")
+   - **File Path** — path to the evidence file within the evidence directory
+   - **Evidence Type** — disk image or memory dump
+   - **Case** — optionally associate with a case
+   - **Description** — additional context
+3. Click **Register**.
 
-1. Choose case, evidence, and mode (`full` / `parse-only` / `triage-only`).
-2. Optionally force **rule-based fallback** (no LLM).
-3. Submit. Jobs are asynchronous.
+DFAT automatically computes hash values and performs initial validation.
 
-The five stages are Acquisition, Parsing, AI Triage, Reporting, and Evaluation.
-See [ARCHITECTURE.md](../architecture/ARCHITECTURE.md).
+### 3.2 Understanding Evidence Types
 
-### Monitor and cancel
+| Type | Description | Parsers Used |
+|------|------------|-------------|
+| **Disk Image** | Raw or forensic disk image (.dd, .E01, .raw) | Filesystem, Registry, Browser History, Event Log |
+| **Memory Dump** | RAM capture (.raw, .mem, .vmem) | Process List, Network Connections, Code Injection, Memory Registry |
 
-The jobs table filters by status (`queued`, `running`, `completed`, `failed`,
-`cancelled`) and case. Job detail polls progress per stage (artefact counts,
-parser results, errors, duration).
+### 3.3 Evidence Validation and MIME Type Verification
 
-**Cancel** is allowed for the job owner or an admin while the job is queued or
-running.
+After registration, DFAT validates:
 
-### Parsers
+- File exists and is readable
+- MIME type matches declared evidence type
+- File size is within acceptable range
+- File is not corrupted (header check)
 
-Admin **Settings** lists registered parsers and whether their native libraries
-are available. Missing `pytsk3` or Volatility3 does not stop the pipeline; those
-parsers are skipped.
+View validation results on the **Evidence Detail** page.
 
----
+### 3.4 Viewing Hash Sets
 
-## Artefacts, timeline, and IOCs
+DFAT computes three hash values for every evidence item:
 
-| Page | Path | Purpose |
-|------|------|---------|
-| Artefact explorer | `/artefacts/:id` | Category tabs, suspicion filter, artefact detail + AI explain |
-| Timeline | `/artefacts/timeline` | Time-ordered artefacts with suspicion colouring |
-| IOC dashboard | `/artefacts/iocs` | Extracted indicators from report / artefact data |
+- **MD5** — for legacy compatibility
+- **SHA-1** — for comparison with existing databases
+- **SHA-256** — primary integrity hash (forensically preferred)
 
-These pages need a completed parse/triage (or a report JSON). Analysts and
-investigators use them to review filesystem, registry, browser, event log,
-process, network, and injected-code artefacts.
+All hashes are displayed on the Evidence Detail page and recorded in the audit trail.
 
----
+### 3.5 Evidence Integrity Verification
 
-## AI analysis usage
+1. Navigate to the evidence detail page.
+2. Click **Verify Integrity** (or visit the Integrity Check page).
+3. DFAT recomputes hash values and compares against the stored originals.
+4. Results show **PASS** or **FAIL** for each algorithm.
 
-Paths: `/ai`, `/ai/summary`.
+This process verifies the evidence has not been modified since registration.
 
-Requires `analysis:create` (admin, investigator, analyst) except the public
-AI health probe.
+### 3.6 Chain-of-Custody Tracking
 
-**AI Analysis** (`/ai`):
+Every action on evidence is recorded in the chain of custody:
 
-- **Health** — whether Ollama is reachable (also shown on the dashboard).
-- **Classify** — suspicion levels and reasoning for artefacts of an evidence ID.
-  Use fallback if the LLM is down.
-- **Summarise** — investigative summary of the artefact set.
-- **Explain** — natural-language explanation of a single artefact (LLM required).
-- **Ask** — investigator Q&A with optional conversation history. Answers are
-  checked for hallucination risk against artefact evidence.
+- Registration and initial hashing
+- Transfers between handlers
+- Pipeline processing events
+- Validation checks
+- Quarantine actions
 
-The structured JSON report remains the **evidential record**. LLM text is
-advisory ([ADR-021](../architecture/adr/021-json-layer-primary-record.md)).
+View the full chain on the **Evidence Detail > Custody** tab.
 
-**AI Summary** (`/ai/summary`) shows the narrative layer from a selected report.
+### 3.7 Evidence Status Lifecycle
 
-Admins can inspect AI usage stats and clear the response cache under
-**Settings**.
+```
+Registered → Validated → Processing → Analysed
+                                        ↓
+                              Quarantined (if issues found)
+```
 
----
+The current status is visible on the Evidence Detail page and in the inventory.
 
-## Report viewing and export
+### 3.8 Evidence Inventory and Filtering
 
-Paths: `/reports`, `/reports/json`, `/reports/:id`.
+The **Evidence Inventory** page shows all registered evidence with:
 
-All roles with `reports:read` (including viewer).
+- Name, type, status
+- Hash values
+- Associated case
+- Registration date
 
-### List and JSON viewer
+Use the filter and search controls to find specific items.
 
-The reports table is populated from completed pipeline jobs. **JSON viewer**
-renders the structured report tree.
+### 3.9 Evidence Statistics
 
-### Report detail
+The **Evidence Statistics** view provides aggregate metrics:
 
-Tabs typically include:
-
-- **Summary** — case name, generation time, pipeline duration.
-- **JSON** — machine-readable evidential layer (schema-versioned).
-- **Narrative** — human-readable summary (advisory).
-- **Export** — PDF (or plaintext fallback if ReportLab is missing), self-contained
-  HTML, and verified JSON file download.
-- **Verify** — integrity hash, schema version, and report ID checks.
-- **Custody** — chain-of-custody snapshot for the evidence.
-- **Audit trail** — forensic actions recorded for the evidence/report.
-- **Compare** — reproducibility check between two report IDs (artefact counts,
-  hashes, suspicion distribution).
-
-Treat JSON + hash verification as the court-facing package; PDF/HTML are
-convenience exports.
+- Total evidence items by type
+- Status distribution
+- Storage utilisation
+- Validation pass/fail rates
 
 ---
 
-## Benchmark evaluation
+## Chapter 4 — Running the Forensic Pipeline
 
-Paths: `/evaluation`, `/evaluation/benchmark`, `/evaluation/benchmark/history`,
-`/evaluation/performance`.
+### 4.1 Starting a Pipeline Run
 
-Place ground-truth files under `data/ground_truth/` (or paths configured in
-YAML). Dataset sources: `dfrws` and `cfreds`.
+1. Navigate to **Pipeline > Run Pipeline**.
+2. Select the **evidence** to analyse.
+3. Select the **case** to associate results with.
+4. Choose analysis stages (defaults to all five):
+   - Acquisition
+   - Parsing
+   - Triage
+   - Reporting
+   - Evaluation
+5. Click **Submit Job**.
 
-1. **Benchmark run** — pick evidence, dataset name, and source; run comparison.
-2. **History** — precision, recall, F1, time-to-triage, false positives/negatives.
-3. **Performance** — historical runs for a dataset name, optional baseline TTT.
+The job is queued and begins processing.
 
-Running a benchmark requires `evaluation:create` (admin, investigator). Viewing
-results requires `evaluation:read`.
+### 4.2 Understanding Pipeline Stages
+
+The five-stage pipeline processes evidence sequentially:
+
+**Stage 1 — Acquisition**
+Loads the evidence file, verifies integrity, and prepares it for parsing. Records custody transfer to the processing system.
+
+**Stage 2 — Parsing**
+Routes evidence to appropriate parsers based on type. Disk images are parsed for filesystem entries, registry keys, browser history, and event logs. Memory dumps are analysed for processes, network connections, and code injection. Artefacts are normalised into a standard format.
+
+**Stage 3 — Triage**
+Applies rule-based scoring to all artefacts. IOC detection identifies indicators of compromise. AI analysis (if enabled) classifies artefacts and generates an investigative summary. Results are aggregated and prioritised by suspicion score.
+
+**Stage 4 — Reporting**
+Generates dual-output forensic reports:
+- **Structured JSON** — machine-readable, schema-validated
+- **Narrative** — human-readable investigative narrative
+
+Reports include integrity hashes and metadata for reproducibility.
+
+**Stage 5 — Evaluation**
+Optionally compares results against ground truth datasets (DFRWS/CFReDS) and computes precision, recall, and F1 metrics.
+
+### 4.3 Monitoring Pipeline Progress
+
+The **Pipeline Detail** page shows real-time progress:
+
+- Current stage and percentage complete
+- Stage-by-stage timing
+- Artefact counts as they are discovered
+- Error or warning messages
+
+Poll the progress endpoint or refresh the page to see updates.
+
+### 4.4 Interpreting Parser Results
+
+After parsing completes, results show:
+
+- **Artefact count** per parser
+- **Parser status** (success, partial, failed)
+- **Warnings** for parsers that encountered non-fatal issues
+
+### 4.5 Handling Pipeline Failures
+
+If a pipeline job fails:
+
+1. Check the **Pipeline Detail** page for the error message.
+2. Review the stage that failed and its logs.
+3. Common causes:
+   - Unsupported evidence format
+   - Corrupted evidence file
+   - Insufficient disk space
+   - Ollama not running (for AI triage)
+4. Fix the issue and submit a new job.
+
+You can **cancel** a running job from the Pipeline Jobs page.
 
 ---
 
-## Usability questionnaire administration
+## Chapter 5 — Exploring Artefacts
 
-| Page | Path | Access |
-|------|------|--------|
-| Questionnaire (participant) | `/questionnaire` | **Public** — no login |
-| Usability results | `/evaluation/usability` | admin, investigator |
+### 5.1 Using the Artefact Explorer
 
-The instrument is **immutable** at runtime ([ADR-023](../architecture/adr/023-questionnaire-immutability.md)).
-Participants submit Likert ratings plus optional free text. Responses are
-stored anonymously (participant ID only).
+Navigate to **Artefacts > Explorer** to browse all discovered artefacts. The explorer provides:
 
-Investigators and admins review aggregate results. **Admins** can export JSON
-and permanently delete all responses (ethics data destruction) via the API:
+- Sortable table of artefacts
+- Column visibility controls
+- Expandable detail rows
 
-- `GET /api/v1/evaluation/usability/export`
-- `DELETE /api/v1/evaluation/usability/responses`
+### 5.2 Filtering by Category and Suspicion Level
 
-Do not collect identifying data in the free-text field.
+Use the filter controls to narrow results:
+
+- **Category** — filesystem, registry, browser, event_log, process, network, injection
+- **Suspicion Level** — critical, high, medium, low, benign
+- **Source Parser** — which parser discovered the artefact
+- **Date Range** — filter by artefact timestamp
+
+### 5.3 Understanding Suspicion Scores
+
+Each artefact receives a **suspicion score** from 0 to 100:
+
+| Score Range | Level | Meaning |
+|------------|-------|---------|
+| 80–100 | Critical | Strong indicators of malicious activity |
+| 60–79 | High | Suspicious activity requiring investigation |
+| 40–59 | Medium | Potentially anomalous, warrants review |
+| 20–39 | Low | Likely benign but flagged by a rule |
+| 0–19 | Benign | Normal system activity |
+
+Scores are determined by rule-based triage and optionally refined by AI classification.
+
+### 5.4 Disk Artefacts
+
+**Filesystem** — files with metadata (path, size, timestamps, permissions). Highlights recently modified, hidden, or executable files in unusual locations.
+
+**Registry** — Windows registry keys and values. Identifies persistence mechanisms (Run/RunOnce), recently accessed files, and USB device history.
+
+**Browser History** — visited URLs, downloads, bookmarks, and cookies with timestamps. Useful for establishing user activity timelines.
+
+**Event Logs** — Windows event log entries (Security, System, Application). Highlights logon events, privilege escalation, service installations, and audit policy changes.
+
+### 5.5 Memory Artefacts
+
+**Processes** — running process list with PIDs, parent PIDs, command lines, and loaded modules. Identifies suspicious process trees, hidden processes, and unusual parent-child relationships.
+
+**Network Connections** — active and recent network connections with local/remote addresses and ports. Highlights connections to known-bad IPs or unusual outbound traffic.
+
+**Injected Code** — code injection indicators including DLL injection, process hollowing, and reflective loading. High-severity artefacts that often indicate malware.
+
+### 5.6 Timeline Analysis
+
+The **Timeline** page presents all artefacts chronologically:
+
+- Interactive timeline visualisation
+- Zoom and pan controls
+- Colour-coded by suspicion level
+- Click any event to view full artefact details
+
+Useful for establishing sequences of events during incident response.
+
+### 5.7 IOC Dashboard
+
+The **IOC Dashboard** provides a focused view of indicators of compromise:
+
+- Summary counts by IOC type (IP, domain, hash, file path, registry key)
+- IOC severity distribution
+- Cross-reference with artefact sources
+- Export IOC list for threat intelligence platforms
 
 ---
 
-## User and role management (admin)
+## Chapter 6 — AI-Assisted Analysis
 
-Paths: `/settings`, `/settings/users`, `/settings/audit`.
+### 6.1 Running AI Classification
 
-### Settings
+1. Navigate to **AI Analysis**.
+2. Select artefacts to classify (or classify all from a case).
+3. Click **Run Classification**.
 
-Read-only operational view:
+The local LLaMA-3 model analyses each artefact and assigns:
+- **Classification** — malicious, suspicious, benign, unknown
+- **Confidence Score** — 0.0 to 1.0
+- **Reasoning** — brief explanation of the classification
 
-- Detailed health (uptime, table counts, package versions, component checks).
-- AI engine health, cache statistics, **clear cache**.
-- Parser inventory and availability.
-- Database / configuration summary (no secret values displayed as editable).
+### 6.2 Understanding AI Confidence Scores
 
-### Users
+| Confidence | Interpretation |
+|-----------|---------------|
+| 0.8–1.0 | High confidence — model is very certain |
+| 0.6–0.79 | Moderate confidence — likely correct but verify |
+| 0.4–0.59 | Low confidence — treat as uncertain |
+| < 0.4 | Very low — model is uncertain, rely on manual analysis |
 
-- List all users (username, email, role, active flag, last login).
-- **Register** a user: username, email, password (≥ 12 characters), full name,
-  role (`admin` / `investigator` / `analyst` / `viewer`). Investigators may also
-  register accounts via the API, but the UI registration modal is admin-only.
-- **Deactivate** an account (cannot deactivate in a way that breaks your own
-  last admin session without a recovery plan). Deactivated users cannot log in.
+### 6.3 Reading the Investigative Summary
 
-There is no “edit role” endpoint; assign the correct `role_name` at registration.
+The **AI Summary Viewer** presents a narrative summary of the investigation findings, including:
 
-### Audit logs
+- Key findings and suspicious patterns
+- Timeline of significant events
+- Recommended next steps
 
-Aggregated API and report audit trails with filters and CSV export. Dual-write
-audit also lands in `data/outputs/audit.log` (JSONL) on the server.
+> **Important Disclaimer**: AI-generated analysis is provided as an assistive tool only. All AI outputs must be verified by a qualified forensic examiner before being used in legal proceedings. AI models may hallucinate, miss context, or misinterpret artefacts. See Sharma et al. (2025) for limitations of LLMs in digital forensics.
+
+### 6.4 Using the Investigator Q&A Feature
+
+The Q&A feature allows you to ask natural-language questions about the case:
+
+1. Navigate to **AI Analysis > Q&A**.
+2. Type a question (e.g., "What suspicious network connections were found?").
+3. The AI responds with relevant artefact references.
+
+This feature uses retrieval-augmented generation (RAG) to ground responses in actual case data.
+
+### 6.5 Understanding AI Limitations
+
+DFAT uses a local LLaMA-3 8B model via Ollama. Limitations include:
+
+- **Hallucination risk** — the model may generate plausible but incorrect analysis
+- **Context window** — large cases may exceed the model's context capacity
+- **No internet access** — the model has no access to threat intelligence feeds
+- **Bias** — model training data may not cover all forensic scenarios
+- **Graceful degradation** — if Ollama is unavailable, DFAT falls back to rule-based analysis only
+
+All AI outputs are clearly labelled and include confidence scores.
 
 ---
 
-## Errors and help
+## Chapter 7 — Reports
 
-- **404 / 500** pages for missing routes and server failures.
-- Request IDs appear as `X-Request-ID` on API responses; quote them when
-  reporting bugs.
-- In-app **Help** (`/help`) repeats the case → evidence → pipeline → report
-  workflow and links to live OpenAPI docs when the API is running.
+### 7.1 Viewing Forensic Reports
+
+After a pipeline completes, navigate to **Reports** to view generated reports. Each report contains:
+
+- **JSON View** — structured, schema-validated data
+- **Narrative View** — human-readable investigative narrative
+
+### 7.2 Dual-Output Format
+
+DFAT generates two complementary report formats:
+
+**Structured JSON Report**
+- Schema-validated against the DFAT report schema
+- Machine-readable for integration with other tools
+- Contains all artefact data, scores, and classifications
+- Includes integrity hash for tamper detection
+
+**Narrative Report**
+- Written in plain English for court presentation
+- Summarises key findings and evidence
+- Includes AI disclaimers where applicable
+- Suitable for non-technical stakeholders
+
+### 7.3 Exporting Reports
+
+Reports can be exported in three formats:
+
+- **PDF** — formatted for printing and court submission
+- **HTML** — styled report viewable in any browser
+- **JSON File** — raw data export with integrity hash
+
+Click the export button on the Report Detail page and select the format.
+
+### 7.4 Verifying Report Integrity
+
+1. Open the report detail page.
+2. Click **Verify Integrity**.
+3. DFAT recomputes the report hash and compares it to the stored value.
+4. Result shows **VERIFIED** or **TAMPERED**.
+
+This ensures reports have not been modified after generation.
+
+### 7.5 Comparing Reports for Reproducibility
+
+1. Navigate to **Reports > Compare**.
+2. Select two reports from the same evidence.
+3. DFAT compares structural content and highlights differences.
+
+This supports the forensic principle of reproducibility — independent analysis should produce consistent results.
+
+### 7.6 Chain-of-Custody Reports
+
+View the evidence custody chain associated with a report, showing the complete handling history from acquisition through analysis.
+
+### 7.7 Audit Trail Reports
+
+View the complete audit trail for a report, showing every system action that contributed to its generation.
+
+---
+
+## Chapter 8 — Benchmark Evaluation
+
+### 8.1 Running DFRWS/CFReDS Benchmark Evaluations
+
+1. Navigate to **Evaluation > Run Benchmark**.
+2. Select a **dataset** (DFRWS or CFReDS).
+3. Select the artefacts to evaluate.
+4. Click **Run Evaluation**.
+
+The system compares DFAT's findings against ground truth and computes accuracy metrics.
+
+### 8.2 Interpreting Results
+
+| Metric | Definition | Target |
+|--------|-----------|--------|
+| **Precision** | Proportion of reported artefacts that are correct | > 70% |
+| **Recall** | Proportion of ground-truth artefacts that were found | > 70% |
+| **F1 Score** | Harmonic mean of precision and recall | > 70% |
+
+Results are displayed on the **Benchmark Results** page with per-category breakdowns.
+
+### 8.3 Time-to-Triage Analysis
+
+The **Performance Dashboard** shows:
+
+- Total pipeline execution time
+- Per-stage timing breakdown
+- Comparison against previous runs
+- Throughput metrics (artefacts per second)
+
+### 8.4 Performance Comparison
+
+Compare multiple benchmark runs to track improvements or regressions over time. The comparison view shows metric trends and highlights significant changes.
+
+---
+
+## Chapter 9 — Usability Questionnaire
+
+### 9.1 Accessing the Questionnaire
+
+The usability questionnaire is available at `/questionnaire` and does not require authentication. This allows evaluation participants to provide feedback without a DFAT account.
+
+### 9.2 Completing the Assessment
+
+The questionnaire uses the System Usability Scale (SUS):
+
+1. Read each statement carefully.
+2. Rate your agreement on a scale of 1 (Strongly Disagree) to 5 (Strongly Agree).
+3. Answer all questions.
+4. Click **Submit**.
+
+The questionnaire takes approximately 5–10 minutes to complete.
+
+### 9.3 Understanding Anonymity Protections
+
+- No personal identifying information is collected.
+- Responses are stored with a random identifier.
+- IP addresses are not logged for questionnaire submissions.
+- Responses cannot be traced back to individual participants.
+- Data is used solely for academic evaluation of the DFAT tool.
+
+---
+
+## Chapter 10 — Administration
+
+### 10.1 User Management
+
+Admins can manage users via **Settings > User Management**:
+
+- View all registered users
+- View user roles and status
+- Deactivate user accounts
+- Role assignments are managed through the API
+
+### 10.2 Viewing Audit Logs
+
+Navigate to **Admin > Audit Logs** to view:
+
+- All system actions with timestamps
+- User who performed each action
+- Action type and affected resource
+- Filter by date range, user, or action type
+
+Audit logs are immutable and provide a forensic trail of system usage.
+
+### 10.3 System Settings and Health Monitoring
+
+**Health Monitoring** (Admin > Settings):
+
+- System uptime and version
+- Database status and table counts
+- AI engine connectivity
+- Memory usage
+- Component health checks
+
+**Monitoring Endpoints**:
+
+- `/api/v1/monitoring/uptime` — public uptime check
+- `/api/v1/monitoring/metrics` — runtime metrics (admin only)
+- `/api/v1/monitoring/logs` — recent log entries (admin only)
+- `/api/v1/health/detailed` — detailed system diagnostics (admin only)
+
+### 10.4 AI Engine Management
+
+- **AI Health** — check Ollama connectivity and model availability
+- **AI Stats** — view classification and summarisation statistics
+- **Cache Management** — view cache hit rates and clear the response cache
+- **Graceful Degradation** — if Ollama is unavailable, DFAT automatically falls back to rule-based analysis
+
+---
+
+## Appendix A — Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `/` | Focus search bar |
+| `Esc` | Close dialog/modal |
+
+## Appendix B — Glossary
+
+| Term | Definition |
+|------|-----------|
+| **Artefact** | A piece of digital evidence extracted from a forensic image |
+| **Chain of Custody** | Documented trail of evidence handling |
+| **DFRWS** | Digital Forensic Research Workshop — provides benchmark datasets |
+| **CFReDS** | Computer Forensic Reference Data Sets — NIST reference datasets |
+| **IOC** | Indicator of Compromise — observable sign of malicious activity |
+| **LLaMA-3** | Meta's Large Language Model, used locally via Ollama |
+| **Ollama** | Local LLM inference engine |
+| **Pipeline** | Automated multi-stage forensic analysis workflow |
+| **SUS** | System Usability Scale — standardised usability questionnaire |
+| **Triage** | Prioritisation of artefacts by suspicion level |
+
+## Appendix C — Support
+
+For issues or questions:
+
+- Check the **Help** page within DFAT
+- Review the [API Examples](../api/EXAMPLES.md)
+- Consult the [Operations Guide](../operations/OPERATIONS_GUIDE.md)
+- Contact: 100176885@canterbury.ac.uk

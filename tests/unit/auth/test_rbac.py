@@ -60,6 +60,10 @@ def test_get_permissions_and_allowed_resources() -> None:
         "reports",
         "evaluation",
         "cases",
+        "datasets",
+        "knowledge",
+        "ml",
+        "threat_intel",
         "users",
         "system",
     ]

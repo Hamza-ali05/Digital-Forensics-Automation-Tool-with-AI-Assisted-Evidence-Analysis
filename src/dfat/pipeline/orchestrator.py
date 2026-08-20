@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, runtime_checkable
 
 from dfat.case_management.enums import EvidenceStatus
 from dfat.core.enums import PipelineStage
 from dfat.core.exceptions import EvidenceNotFoundError
-from dfat.core.models.artefact import ArtefactSet
+from dfat.core.models.artefact import ArtefactSet, RankedArtefact
 from dfat.core.models.evaluation import BenchmarkResult
 from dfat.core.models.evidence import CaseMetadata
 from dfat.core.models.pipeline import PipelineState, StageResult
@@ -39,6 +39,20 @@ from dfat.settings import DFATSettings
 logger = logging.getLogger(__name__)
 
 
+@runtime_checkable
+class PipelinePostCompleteHook(Protocol):
+    """Hook invoked after a pipeline job has produced its forensic report."""
+
+    async def on_pipeline_complete(
+        self,
+        job: PipelineJob,
+        artefact_set: ArtefactSet,
+        ranked: list[RankedArtefact],
+        report: ForensicReport,
+    ) -> None:
+        """Index or otherwise consume completed pipeline outputs."""
+
+
 class PipelineOrchestrator:
     """Coordinate the full job lifecycle across registered pipeline stages."""
 
@@ -59,6 +73,7 @@ class PipelineOrchestrator:
         benchmark_comparator: BenchmarkComparator,
         pipeline_repo: Optional[SQLAlchemyPipelineRepository] = None,
         parser_registry: Optional[ParserRegistry] = None,
+        post_complete_hooks: Optional[list[PipelinePostCompleteHook]] = None,
     ) -> None:
         """Initialise the top-level pipeline orchestrator.
 
@@ -78,6 +93,8 @@ class PipelineOrchestrator:
             benchmark_comparator: Benchmark comparison engine.
             pipeline_repo: Optional SQLAlchemy pipeline job repository.
             parser_registry: Optional parser registry for availability APIs.
+            post_complete_hooks: Optional hooks run after report generation.
+                Failures are logged and never change the pipeline result.
         """
         self._registry = stage_registry
         self._job_manager = job_manager
@@ -94,6 +111,9 @@ class PipelineOrchestrator:
         self._benchmark_comparator = benchmark_comparator
         self._pipeline_repo = pipeline_repo
         self._parser_registry = parser_registry
+        self._post_complete_hooks: list[PipelinePostCompleteHook] = list(
+            post_complete_hooks or []
+        )
 
         self._job_contexts: dict[str, PipelineContext] = {}
         self._pipeline_states: dict[str, PipelineState] = {}
@@ -231,6 +251,7 @@ class PipelineOrchestrator:
             },
         )
         await self._persist_job(completed)
+        await self._run_post_complete_hooks(completed, context)
         return completed
 
     async def execute_pipeline(
@@ -273,6 +294,30 @@ class PipelineOrchestrator:
             metadata=metadata,
         )
         return await self.execute_submitted_job(job.job_id)
+
+    async def run_full_pipeline(
+        self,
+        evidence_id: str,
+        case_id: str,
+        user_id: str,
+        use_fallback: bool = False,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> PipelineJob:
+        """Run the complete five-stage pipeline, then invoke post-complete hooks.
+
+        Hooks run after the report is generated and after job duration has been
+        recorded, so they do not affect pipeline timing or benchmark measurements.
+        Hook errors are logged and never change the returned job result.
+        """
+        return await self.execute_pipeline(
+            evidence_id=evidence_id,
+            case_id=case_id,
+            user_id=user_id,
+            mode="full",
+            use_fallback=use_fallback,
+            metadata=metadata,
+        )
 
     async def get_job(self, job_id: str) -> PipelineJob:
         """Return a job from memory or the database.
@@ -501,6 +546,37 @@ class PipelineOrchestrator:
                 job.job_id,
                 exc,
             )
+
+    async def _run_post_complete_hooks(
+        self,
+        job: PipelineJob,
+        context: PipelineContext,
+    ) -> None:
+        """Run post-complete hooks after the job result is already recorded.
+
+        Failures are logged and swallowed so they cannot change pipeline status,
+        duration, or benchmark measurements.
+        """
+        if job.status is not JobStatus.COMPLETED:
+            return
+        if not self._post_complete_hooks:
+            return
+        artefact_set = context.artefact_set
+        report = context.report
+        if artefact_set is None or report is None:
+            return
+        ranked = list(context.ranked_artefacts or [])
+        for hook in self._post_complete_hooks:
+            try:
+                await hook.on_pipeline_complete(job, artefact_set, ranked, report)
+            except Exception as exc:  # noqa: BLE001 — fire-and-forget
+                logger.warning(
+                    "Post-complete hook %s failed for job %s: %s",
+                    type(hook).__name__,
+                    job.job_id,
+                    exc,
+                    exc_info=True,
+                )
 
     def _cache_job_outputs(self, job: PipelineJob, context: PipelineContext) -> None:
         """Cache artefact sets and report IDs for API/service consumers."""

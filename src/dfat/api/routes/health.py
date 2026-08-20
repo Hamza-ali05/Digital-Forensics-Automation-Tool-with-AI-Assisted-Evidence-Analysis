@@ -38,6 +38,9 @@ class HealthResponse(APIModel):
     status: str = "healthy"
     version: str
     timestamp: datetime
+    system_readiness: Optional[str] = None
+    degraded_services: list[str] = Field(default_factory=list)
+    available_capabilities: list[str] = Field(default_factory=list)
 
 
 class ReadinessResponse(APIModel):
@@ -46,6 +49,8 @@ class ReadinessResponse(APIModel):
     status: str
     checks: dict[str, bool]
     timestamp: datetime
+    system_readiness: Optional[str] = None
+    services: dict[str, str] = Field(default_factory=dict)
 
 
 class DetailedHealthResponse(APIModel):
@@ -67,18 +72,43 @@ def _container(request: Request):  # type: ignore[no-untyped-def]
     return request.app.state.container
 
 
+def _startup_report(request: Request):
+    """Return the bootstrap startup report stored on app state, if present."""
+    return getattr(request.app.state, "startup_report", None)
+
+
+def _system_readiness(request: Request) -> Optional[str]:
+    """Return bootstrap system readiness from app state."""
+    readiness = getattr(request.app.state, "system_readiness", None)
+    if readiness is None:
+        return None
+    return readiness.value if hasattr(readiness, "value") else str(readiness)
+
+
+def _service_status_map(request: Request) -> dict[str, str]:
+    """Build per-phase service status from the startup report."""
+    report = _startup_report(request)
+    if report is None:
+        return {}
+    return {phase.phase.value: phase.status.value for phase in report.phases}
+
+
 async def _aggregated_health(request: Request) -> AggregatedHealth:
     """Run the monitoring aggregator against the request DI container."""
     return await HealthAggregator.from_container(_container(request)).collect()
 
 
 @router.get("", response_model=HealthResponse)
-async def health() -> HealthResponse:
+async def health(request: Request) -> HealthResponse:
     """Basic liveness check (no authentication)."""
+    report = _startup_report(request)
     return HealthResponse(
         status="healthy",
         version=__version__,
         timestamp=datetime.now(UTC),
+        system_readiness=_system_readiness(request),
+        degraded_services=list(report.degraded_services) if report else [],
+        available_capabilities=list(report.available_capabilities) if report else [],
     )
 
 
@@ -90,6 +120,8 @@ async def readiness(request: Request) -> ReadinessResponse:
         status=snapshot.readiness_status,
         checks=snapshot.checks,
         timestamp=datetime.now(UTC),
+        system_readiness=_system_readiness(request),
+        services=_service_status_map(request),
     )
 
 

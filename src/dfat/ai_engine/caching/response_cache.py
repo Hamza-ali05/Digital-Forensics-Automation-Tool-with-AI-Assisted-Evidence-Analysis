@@ -152,6 +152,16 @@ class AIResponseCache:
             self._store.clear()
             return count
 
+    async def evict_expired(self) -> int:
+        """Remove TTL-expired entries and return the number evicted."""
+        async with self._lock:
+            expired_keys = [
+                key for key, entry in self._store.items() if self._is_expired(entry)
+            ]
+            for key in expired_keys:
+                del self._store[key]
+            return len(expired_keys)
+
     async def get_stats(self) -> CacheStats:
         """Return hit/miss/eviction statistics and current size."""
         async with self._lock:

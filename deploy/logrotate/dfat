@@ -1,0 +1,14 @@
+/var/log/dfat/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    sharedscripts
+    postrotate
+        # Signal the application to reopen log files if needed
+        [ -f /var/run/dfat.pid ] && kill -USR1 $(cat /var/run/dfat.pid) 2>/dev/null || true
+    endscript
+}

@@ -119,3 +119,91 @@ export const PIPELINE_STATUS_COLOURS = Object.freeze({
   canceled: "#adb5bd",
   timed_out: "#dc3545",
 });
+
+export const DATASET_CATEGORY = Object.freeze({
+  BENCHMARK: "benchmark",
+  FORENSIC_OPERATIONAL: "forensic_operational",
+  AI_KNOWLEDGE: "ai_knowledge",
+  THREAT_INTELLIGENCE: "threat_intelligence",
+  MACHINE_LEARNING: "machine_learning",
+  FORENSIC_CHALLENGE: "forensic_challenge",
+  USER_UPLOADED: "user_uploaded",
+});
+
+export const DATASET_FORMAT = Object.freeze({
+  DISK_IMAGE: "disk_image",
+  MEMORY_DUMP: "memory_dump",
+  PCAP: "pcap",
+  EVTX: "evtx",
+  REGISTRY_HIVE: "registry_hive",
+  SQLITE_DB: "sqlite_db",
+  CSV: "csv",
+  JSON: "json",
+  XML: "xml",
+  YARA_RULES: "yara_rules",
+  SIGMA_RULES: "sigma_rules",
+  STIX_BUNDLE: "stix_bundle",
+  PLAIN_TEXT: "plain_text",
+  BINARY: "binary",
+  ARCHIVE: "archive",
+  UNKNOWN: "unknown",
+});
+
+export const DATASET_STATUS = Object.freeze({
+  DISCOVERED: "discovered",
+  VALIDATING: "validating",
+  VALIDATED: "validated",
+  INDEXING: "indexing",
+  INDEXED: "indexed",
+  PREPROCESSING: "preprocessing",
+  READY: "ready",
+  FAILED: "failed",
+  ARCHIVED: "archived",
+});
+
+export const INDEXING_STATUS = Object.freeze({
+  PENDING: "pending",
+  IN_PROGRESS: "in_progress",
+  COMPLETE: "complete",
+  FAILED: "failed",
+  STALE: "stale",
+});
+
+export const ML_MODEL_NAMES = Object.freeze({
+  MALWARE_CLASSIFIER: "MalwareClassifier",
+  ANOMALY_DETECTOR: "AnomalyDetector",
+  PROCESS_SCORER: "ProcessSuspicionScorer",
+  IOC_PREDICTOR: "IOCPredictor",
+});
+
+export const ML_EXPERIMENT_STATUS = Object.freeze({
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+});
+
+export const DATASET_STATUS_COLOURS = Object.freeze({
+  discovered: "#6c757d",
+  validating: "#0dcaf0",
+  validated: "#0d6efd",
+  indexing: "#fd7e14",
+  indexed: "#198754",
+  preprocessing: "#ffc107",
+  ready: "#198754",
+  failed: "#dc3545",
+  archived: "#adb5bd",
+});
+
+export const INDEXING_STATUS_COLOURS = Object.freeze({
+  pending: "#6c757d",
+  in_progress: "#0d6efd",
+  complete: "#198754",
+  failed: "#dc3545",
+  stale: "#ffc107",
+});
+
+export const ML_EXPERIMENT_STATUS_COLOURS = Object.freeze({
+  running: "#0d6efd",
+  completed: "#198754",
+  failed: "#dc3545",
+});

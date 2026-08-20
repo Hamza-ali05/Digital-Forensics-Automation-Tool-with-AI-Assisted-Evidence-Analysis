@@ -1,0 +1,86 @@
+name: DFAT Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,forensic]" --break-system-packages
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Build backend Docker image
+        run: docker build -t dfat-backend:${{ steps.version.outputs.VERSION }} .
+
+      - name: Build frontend Docker image
+        run: docker build -t dfat-frontend:${{ steps.version.outputs.VERSION }} frontend/
+
+      - name: Run production readiness check
+        run: python scripts/production_readiness_check.py
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD)
+          fi
+          echo "CHANGELOG<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend for release
+        run: cd frontend && npm run build
+
+      - name: Create release archive
+        run: |
+          tar -czf dfat-frontend-${{ steps.version.outputs.VERSION }}.tar.gz -C frontend/build .
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DFAT ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## DFAT ${{ steps.version.outputs.VERSION }}
+
+            ### Changes
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ### Docker Images
+            ```bash
+            docker build -t dfat-backend:${{ steps.version.outputs.VERSION }} .
+            docker build -t dfat-frontend:${{ steps.version.outputs.VERSION }} frontend/
+            ```
+          files: |
+            dfat-frontend-${{ steps.version.outputs.VERSION }}.tar.gz

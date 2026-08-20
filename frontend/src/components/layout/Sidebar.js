@@ -27,6 +27,12 @@ import {
   faBug,
   faAlignLeft,
   faCode,
+  faBrain,
+  faBook,
+  faShieldVirus,
+  faServer,
+  faListUl,
+  faThLarge,
 } from "@fortawesome/free-solid-svg-icons";
 import { Badge, Button, Nav, Navbar } from "@themesberg/react-bootstrap";
 
@@ -77,6 +83,17 @@ function isNavActive(pathname, link) {
     if (pathname.startsWith("/reports/json")) return true;
     return pathname.startsWith(`${link}/`);
   }
+  if (
+    link === Routes.Datasets.path ||
+    link === Routes.MLModels.path ||
+    link === Routes.Knowledge.path ||
+    link === Routes.ThreatIntel.path ||
+    link === Routes.AdminSystem.path ||
+    link === Routes.AdminTasks.path ||
+    link === Routes.AdminCapabilities.path
+  ) {
+    return pathname === link || pathname.startsWith(`${link}/`);
+  }
   return pathname === link || pathname.startsWith(`${link}/`);
 }
 
@@ -89,6 +106,8 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
   const { logout, user, role } = useAuth();
   const { canRead: canManageUsers } = usePermission("users");
   const canRegister = role === "admin" || role === "investigator";
+  const canIntelligence =
+    role === "admin" || role === "investigator" || role === "analyst";
 
   const [healthOk, setHealthOk] = useState(null);
   const [activeCaseCount, setActiveCaseCount] = useState(0);
@@ -387,6 +406,37 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                 </Nav.Link>
               </Nav.Item>
 
+              {canIntelligence ? (
+                <>
+                  <Nav.Item className="my-2">
+                    <hr className="border-light opacity-25 my-2" />
+                    <small className="text-uppercase text-muted px-3">
+                      Intelligence
+                    </small>
+                  </Nav.Item>
+                  <NavItem
+                    title="Datasets"
+                    link={Routes.Datasets.path}
+                    icon={faDatabase}
+                  />
+                  <NavItem
+                    title="Machine Learning"
+                    link={Routes.MLModels.path}
+                    icon={faBrain}
+                  />
+                  <NavItem
+                    title="Knowledge Base"
+                    link={Routes.Knowledge.path}
+                    icon={faBook}
+                  />
+                  <NavItem
+                    title="Threat Intel"
+                    link={Routes.ThreatIntel.path}
+                    icon={faShieldVirus}
+                  />
+                </>
+              ) : null}
+
               {canManageUsers || canRegister ? (
                 <>
                   <Nav.Item className="my-2">
@@ -412,6 +462,21 @@ export default function Sidebar({ show = false, onClose, onToggle }) {
                         title="Audit Logs"
                         link={Routes.SettingsAudit.path}
                         icon={faClipboardList}
+                      />
+                      <NavItem
+                        title="System Status"
+                        link={Routes.AdminSystem.path}
+                        icon={faServer}
+                      />
+                      <NavItem
+                        title="Task Monitor"
+                        link={Routes.AdminTasks.path}
+                        icon={faListUl}
+                      />
+                      <NavItem
+                        title="Capabilities"
+                        link={Routes.AdminCapabilities.path}
+                        icon={faThLarge}
                       />
                     </>
                   ) : null}

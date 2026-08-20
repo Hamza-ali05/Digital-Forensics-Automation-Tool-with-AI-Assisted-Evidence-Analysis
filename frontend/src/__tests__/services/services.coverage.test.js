@@ -10,6 +10,7 @@ import aiService from "services/ai.service";
 import healthService from "services/health.service";
 import usersService from "services/users.service";
 import evaluationService from "services/evaluation.service";
+import systemService from "services/system.service";
 import * as api from "services/api";
 
 jest.mock("services/api", () => ({
@@ -71,6 +72,17 @@ describe("service method coverage (mocked api)", () => {
     await evaluationService.getPerformance({});
     await evaluationService.getQuestionnaire();
     await evaluationService.submitQuestionnaire({});
+
+    await systemService.getStartupReport();
+    await systemService.getStatus();
+    await systemService.getResources();
+    api.apiGet.mockResolvedValueOnce({ data: { alerts: [] } });
+    await systemService.getAlerts();
+    api.apiGet.mockResolvedValueOnce({ data: { tasks: {} } });
+    await systemService.getTasks();
+    await systemService.restartTask("HealthMonitor");
+    await systemService.getCapabilities();
+    await systemService.getDiagnostics();
 
     await casesService.getMine();
     await casesService.getSummary("c1");

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -22,16 +24,26 @@ from dfat.api.routes import (
     analysis,
     auth,
     cases,
+    datasets,
     evaluation,
     evidence,
     evidence_management,
     health,
+    knowledge,
+    ml,
+    monitoring,
     pipeline,
     reports,
+    system,
+    threat_intel,
     users,
 )
 from dfat.api.versioning import API_V1_PREFIX
+from dfat.bootstrap.models import SystemReadiness
+from dfat.bootstrap.startup_report import StartupReportPrinter
 from dfat.container import ApplicationContainer, build_application_container
+
+logger = logging.getLogger(__name__)
 
 _OPENAPI_TAGS = [
     {"name": "Auth", "description": "Registration, login, and token lifecycle"},
@@ -57,6 +69,21 @@ _OPENAPI_TAGS = [
         "name": "Evaluation",
         "description": "DFRWS/CFReDS benchmark evaluation endpoints",
     },
+    {
+        "name": "Monitoring",
+        "description": "Production monitoring, metrics, and log access",
+    },
+    {"name": "Datasets", "description": "Dataset intelligence registry and indexing"},
+    {"name": "Knowledge", "description": "Vector store, IOC database, and knowledge graph"},
+    {"name": "ML", "description": "Model training, registry, experiments, and inference"},
+    {
+        "name": "Threat Intelligence",
+        "description": "YARA/Sigma rules, MITRE coverage, and intel scanning",
+    },
+    {
+        "name": "System",
+        "description": "Startup status, runtime monitoring, and system diagnostics",
+    },
 ]
 
 
@@ -64,27 +91,39 @@ _OPENAPI_TAGS = [
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application startup and shutdown lifecycle hooks.
 
-    Args:
-        app: FastAPI application instance.
-
-    Yields:
-        Control to the running application.
+    Runs the bootstrap boot sequencer before serving requests, stores the
+    startup report on ``app.state``, and performs graceful shutdown.
     """
     container: ApplicationContainer = app.state.container
     container.logging.setup_app_logging()
 
-    settings = container.settings()
-    db_engine = container.database.database_engine()
-    if settings.database.create_tables_on_startup:
-        # Ensure ORM models are registered on Base.metadata.
-        import dfat.database  # noqa: F401
+    boot_sequencer = container.boot_sequencer()
+    startup_report = await boot_sequencer.boot()
 
-        await db_engine.create_tables()
+    if startup_report.system_status == SystemReadiness.UNAVAILABLE:
+        raise SystemExit("DFAT startup failed. Check logs for details.")
+
+    app.state.startup_report = startup_report
+    app.state.system_readiness = startup_report.system_status
+    app.state.task_manager = container.task_manager()
+
+    printer = StartupReportPrinter()
+    try:
+        printer.print_report(startup_report)
+    except UnicodeEncodeError:
+        logger.warning("Could not print startup banner — console encoding unsupported")
+    printer.save_report(startup_report, Path("data/outputs/startup_report.json"))
+
+    await app.state.task_manager.start_all()
+
+    shutdown_handler = container.shutdown_handler()
+    shutdown_handler.register_signal_handlers()
 
     try:
         yield
     finally:
-        await db_engine.dispose()
+        shutdown_handler = container.shutdown_handler()
+        await shutdown_handler.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -149,5 +188,11 @@ def create_app() -> FastAPI:
     app.include_router(pipeline.router, prefix=api_prefix)
     app.include_router(reports.router, prefix=api_prefix)
     app.include_router(evaluation.router, prefix=api_prefix)
+    app.include_router(monitoring.router, prefix=api_prefix)
+    app.include_router(datasets.router, prefix=api_prefix)
+    app.include_router(knowledge.router, prefix=api_prefix)
+    app.include_router(ml.router, prefix=api_prefix)
+    app.include_router(threat_intel.router, prefix=api_prefix)
+    app.include_router(system.router, prefix=api_prefix)
 
     return app

@@ -1,0 +1,594 @@
+{
+  "info": {
+    "name": "DFAT API Collection",
+    "description": "Digital Forensics Automation Tool - Complete API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:8000/api/v1"},
+    {"key": "access_token", "value": ""}
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/register",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"analyst1\",\"email\":\"analyst1@example.com\",\"password\":\"Secure!Pass#2026\",\"full_name\":\"Jane Doe\"}"
+            }
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{"key": "Content-Type", "value": "application/x-www-form-urlencoded"}],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "username", "value": "admin"},
+                {"key": "password", "value": "Admin!Pass#2026"}
+              ]
+            }
+          },
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "var json = pm.response.json();",
+            "pm.collectionVariables.set('access_token', json.access_token);"
+          ]}}]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {"method": "POST", "url": "{{base_url}}/auth/refresh"},
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "var json = pm.response.json();",
+            "pm.collectionVariables.set('access_token', json.access_token);"
+          ]}}]
+        },
+        {
+          "name": "Logout",
+          "request": {"method": "POST", "url": "{{base_url}}/auth/logout"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"]}}]
+        },
+        {
+          "name": "Logout All",
+          "request": {"method": "POST", "url": "{{base_url}}/auth/logout-all"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/auth/change-password",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"current_password\":\"Admin!Pass#2026\",\"new_password\":\"NewSecure!Pass#2026\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {"method": "GET", "url": "{{base_url}}/users/me"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "List Users",
+          "request": {"method": "GET", "url": "{{base_url}}/users"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Get User by ID",
+          "request": {"method": "GET", "url": "{{base_url}}/users/1"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Deactivate User",
+          "request": {"method": "PUT", "url": "{{base_url}}/users/1/deactivate"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {"method": "GET", "url": "{{base_url}}/health", "auth": {"type": "noauth"}},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Readiness",
+          "request": {"method": "GET", "url": "{{base_url}}/health/ready", "auth": {"type": "noauth"}},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Detailed (Admin)",
+          "request": {"method": "GET", "url": "{{base_url}}/health/detailed"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Cases",
+      "item": [
+        {
+          "name": "Create Case",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cases",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"case_name\":\"Investigation 001\",\"description\":\"Suspected data exfiltration\",\"case_type\":\"incident_response\",\"priority\":\"high\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "List Cases",
+          "request": {"method": "GET", "url": "{{base_url}}/cases"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "My Cases",
+          "request": {"method": "GET", "url": "{{base_url}}/cases/mine"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Get Case",
+          "request": {"method": "GET", "url": "{{base_url}}/cases/1"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Case Summary",
+          "request": {"method": "GET", "url": "{{base_url}}/cases/1/summary"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Open Case",
+          "request": {"method": "POST", "url": "{{base_url}}/cases/1/open"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Activate Case",
+          "request": {"method": "POST", "url": "{{base_url}}/cases/1/activate"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Submit Review",
+          "request": {"method": "POST", "url": "{{base_url}}/cases/1/submit-review"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Close Case",
+          "request": {"method": "POST", "url": "{{base_url}}/cases/1/close"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Archive Case",
+          "request": {"method": "POST", "url": "{{base_url}}/cases/1/archive"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Add Investigator",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cases/1/investigators",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"user_id\":2}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Remove Investigator",
+          "request": {"method": "DELETE", "url": "{{base_url}}/cases/1/investigators/2"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Link Evidence",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/cases/1/evidence",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"evidence_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Evidence",
+      "item": [
+        {
+          "name": "Register Evidence",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evidence/register",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"name\":\"server-memory.raw\",\"file_path\":\"/evidence/server-memory.raw\",\"evidence_type\":\"memory_dump\",\"case_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "Inventory",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence/inventory"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Statistics",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence/statistics"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Evidence Detail",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence/1/detail"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Validate Evidence",
+          "request": {"method": "POST", "url": "{{base_url}}/evidence/1/validate"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Record Custody",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evidence/1/custody",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action\":\"transfer\",\"handler_name\":\"Lab Analyst\",\"reason\":\"Transfer to analysis workstation\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "Custody Chain",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence/1/custody"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Evidence Status",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence/1/status"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Quarantine Evidence",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evidence/1/quarantine",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"reason\":\"Suspected contamination\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Create Evidence (Legacy)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evidence",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"name\":\"disk.dd\",\"file_path\":\"/evidence/disk.dd\",\"evidence_type\":\"disk_image\",\"hash_value\":\"abc123\",\"hash_algorithm\":\"sha256\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "List Evidence (Legacy)",
+          "request": {"method": "GET", "url": "{{base_url}}/evidence"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Delete Evidence",
+          "request": {"method": "DELETE", "url": "{{base_url}}/evidence/1"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Pipeline",
+      "item": [
+        {
+          "name": "Submit Job",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/pipeline",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"evidence_id\":1,\"case_id\":1,\"stages\":[\"acquisition\",\"parsing\",\"triage\",\"reporting\"]}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 202', () => pm.response.to.have.status(202));"]}}]
+        },
+        {
+          "name": "List Jobs",
+          "request": {"method": "GET", "url": "{{base_url}}/pipeline/jobs"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "List Parsers",
+          "request": {"method": "GET", "url": "{{base_url}}/pipeline/parsers"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Job Status",
+          "request": {"method": "GET", "url": "{{base_url}}/pipeline/job-uuid"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Job Progress",
+          "request": {"method": "GET", "url": "{{base_url}}/pipeline/job-uuid/progress"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Cancel Job",
+          "request": {"method": "POST", "url": "{{base_url}}/pipeline/job-uuid/cancel"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "AI Analysis",
+      "item": [
+        {
+          "name": "Classify",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/ai/classify",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"artefact_ids\":[\"uuid-1\",\"uuid-2\"],\"case_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Summarise",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/ai/summarise",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"case_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Explain",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/ai/explain",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"artefact_id\":\"uuid-1\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Q&A",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/ai/qa",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"question\":\"What suspicious network connections were found?\",\"case_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "AI Health",
+          "request": {"method": "GET", "url": "{{base_url}}/ai/health"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "AI Stats",
+          "request": {"method": "GET", "url": "{{base_url}}/ai/stats"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Cache Stats",
+          "request": {"method": "GET", "url": "{{base_url}}/ai/cache/stats"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Clear Cache",
+          "request": {"method": "DELETE", "url": "{{base_url}}/ai/cache"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get Report",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Report JSON",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/json"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Report Narrative",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/narrative"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Export PDF",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/export/pdf"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Export HTML",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/export/html"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Export JSON File",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/export/json-file"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Verify Integrity",
+          "request": {"method": "POST", "url": "{{base_url}}/reports/report-uuid/verify"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Compare Reports",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/reports/compare",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"report_id_a\":\"uuid-a\",\"report_id_b\":\"uuid-b\"}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Custody Chain",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/custody"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Audit Trail",
+          "request": {"method": "GET", "url": "{{base_url}}/reports/report-uuid/audit-trail"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Evaluation",
+      "item": [
+        {
+          "name": "Run Benchmark",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evaluation/benchmark/run",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"dataset_name\":\"dfrws-2023\",\"artefact_ids\":[\"uuid-1\"]}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Benchmark Results",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/benchmark/results"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Benchmark Result by ID",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/benchmark/results/1"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Performance Analysis",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/benchmark/performance"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Datasets",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/benchmark/datasets"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Submit Usability Response",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/evaluation/usability/submit",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"responses\":[{\"question_id\":\"sus_q1\",\"score\":4},{\"question_id\":\"sus_q2\",\"score\":2}]}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Usability Questionnaire",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/usability/questionnaire"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Usability Results",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/usability/results"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Export Usability CSV",
+          "request": {"method": "GET", "url": "{{base_url}}/evaluation/usability/export"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Delete Benchmark Result",
+          "request": {"method": "DELETE", "url": "{{base_url}}/evaluation/benchmark/results/1"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 204', () => pm.response.to.have.status(204));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "Uptime",
+          "request": {"method": "GET", "url": "{{base_url}}/monitoring/uptime", "auth": {"type": "noauth"}},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Metrics",
+          "request": {"method": "GET", "url": "{{base_url}}/monitoring/metrics?since_minutes=60"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Logs",
+          "request": {"method": "GET", "url": "{{base_url}}/monitoring/logs?level=WARNING&limit=50"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    },
+    {
+      "name": "Analysis",
+      "item": [
+        {
+          "name": "Start Analysis",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/analysis",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"evidence_id\":1}"}
+          },
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 202', () => pm.response.to.have.status(202));"]}}]
+        },
+        {
+          "name": "Analysis Status",
+          "request": {"method": "GET", "url": "{{base_url}}/analysis/pipeline-uuid"},
+          "event": [{"listen": "test", "script": {"exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Auto-login if no token set",
+          "if (!pm.collectionVariables.get('access_token')) {",
+          "  pm.sendRequest({",
+          "    url: pm.collectionVariables.get('base_url') + '/auth/login',",
+          "    method: 'POST',",
+          "    header: {'Content-Type': 'application/x-www-form-urlencoded'},",
+          "    body: {mode: 'urlencoded', urlencoded: [",
+          "      {key: 'username', value: 'admin'},",
+          "      {key: 'password', value: 'Admin!Pass#2026'}",
+          "    ]}",
+          "  }, function(err, res) {",
+          "    if (!err && res.code === 200) {",
+          "      pm.collectionVariables.set('access_token', res.json().access_token);",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ]
+}

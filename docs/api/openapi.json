@@ -1,0 +1,6700 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DFAT — Digital Forensics Automation Tool API",
+    "description": "REST API for the Digital Forensics Automation Tool with AI-Assisted Evidence Analysis. Supports forensic evidence management, automated analysis via local LLaMA-3, dual-output reporting, and DFRWS/CFReDS benchmark evaluation.",
+    "contact": {
+      "name": "Muhammad Aaqif Afzaal",
+      "email": "100176885@canterbury.ac.uk"
+    },
+    "license": {
+      "name": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health",
+        "description": "Basic liveness check (no authentication).",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Readiness",
+        "description": "Readiness check aggregating database, AI, storage, pipeline, and audit.",
+        "operationId": "readiness_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/detailed": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Detailed Health",
+        "description": "Detailed system diagnostics (admin only).",
+        "operationId": "detailed_health_api_v1_health_detailed_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetailedHealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register User",
+        "description": "Register a new investigator account (admin/investigator only).",
+        "operationId": "register_user_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "description": "Authenticate with username/password and issue a token pair.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Refresh Access Token",
+        "description": "Exchange a refresh token for a new access/refresh pair.",
+        "operationId": "refresh_access_token_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Logout",
+        "description": "Revoke the current access-token session.",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Logout All",
+        "description": "Revoke all sessions for the authenticated user.",
+        "operationId": "logout_all_api_v1_auth_logout_all_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object",
+                  "title": "Response Logout All Api V1 Auth Logout All Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change Password",
+        "description": "Change the authenticated user's password.",
+        "operationId": "change_password_api_v1_auth_change_password_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get Me",
+        "description": "Return the authenticated user's public profile.",
+        "operationId": "get_me_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "List Users",
+        "description": "List all users (admin only).",
+        "operationId": "list_users_api_v1_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Users Api V1 Users Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get User",
+        "description": "Get a user profile by ID (admin only).",
+        "operationId": "get_user_api_v1_users__user_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/deactivate": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Deactivate User",
+        "description": "Deactivate a user account (admin only).",
+        "operationId": "deactivate_user_api_v1_users__user_id__deactivate_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Create Case",
+        "description": "Create a new investigation case.",
+        "operationId": "create_case_api_v1_cases_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "List Cases",
+        "description": "List cases, optionally filtered by status and name search.",
+        "operationId": "list_cases_api_v1_cases_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CaseStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional case status filter",
+              "title": "Status"
+            },
+            "description": "Optional case status filter"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional case-name search (parameterized)",
+              "title": "Search"
+            },
+            "description": "Optional case-name search (parameterized)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/mine": {
+      "get": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Get My Cases",
+        "description": "List cases where the current user is an active investigator.",
+        "operationId": "get_my_cases_api_v1_cases_mine_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cases/{case_id}": {
+      "get": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Get Case",
+        "description": "Get case detail by ID.",
+        "operationId": "get_case_api_v1_cases__case_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/summary": {
+      "get": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Get Case Summary",
+        "description": "Get a comprehensive case summary.",
+        "operationId": "get_case_summary_api_v1_cases__case_id__summary_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/open": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Open Case",
+        "description": "Open a case (CREATED → OPEN). Requires a lead investigator.",
+        "operationId": "open_case_api_v1_cases__case_id__open_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/activate": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Activate Case",
+        "description": "Activate a case (OPEN → ACTIVE).",
+        "operationId": "activate_case_api_v1_cases__case_id__activate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/submit-review": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Submit For Review",
+        "description": "Submit a case for review (ACTIVE → UNDER_REVIEW).",
+        "operationId": "submit_for_review_api_v1_cases__case_id__submit_review_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/reopen": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Reopen Case",
+        "description": "Reopen a case under review (UNDER_REVIEW → ACTIVE).",
+        "operationId": "reopen_case_api_v1_cases__case_id__reopen_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseTransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/close": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Close Case",
+        "description": "Close a case and seal linked evidence custody chains.",
+        "operationId": "close_case_api_v1_cases__case_id__close_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseTransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/archive": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Archive Case",
+        "description": "Archive a closed case (CLOSED → ARCHIVED).",
+        "operationId": "archive_case_api_v1_cases__case_id__archive_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/investigators": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Assign Investigator",
+        "description": "Assign an investigator to a case.",
+        "operationId": "assign_investigator_api_v1_cases__case_id__investigators_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignInvestigatorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/investigators/{user_id}": {
+      "delete": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Remove Investigator",
+        "description": "Soft-remove an investigator from a case.",
+        "operationId": "remove_investigator_api_v1_cases__case_id__investigators__user_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/evidence": {
+      "post": {
+        "tags": [
+          "Cases"
+        ],
+        "summary": "Add Evidence To Case",
+        "description": "Associate existing evidence with a case.",
+        "operationId": "add_evidence_to_case_api_v1_cases__case_id__evidence_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddEvidenceToCaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/register": {
+      "post": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Register And Validate Evidence",
+        "description": "Register evidence, acquire custody, validate, and link to a case.",
+        "operationId": "register_and_validate_evidence_api_v1_evidence_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceValidationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evidence/inventory": {
+      "get": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Get Evidence Inventory",
+        "description": "List evidence inventory, optionally filtered by case.",
+        "operationId": "get_evidence_inventory_api_v1_evidence_inventory_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceInventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/statistics": {
+      "get": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Get Evidence Statistics",
+        "description": "Return aggregated evidence statistics.",
+        "operationId": "get_evidence_statistics_api_v1_evidence_statistics_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceStatisticsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/detail": {
+      "get": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Get Evidence Detail",
+        "description": "Get comprehensive evidence detail.",
+        "operationId": "get_evidence_detail_api_v1_evidence__evidence_id__detail_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/validate": {
+      "post": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Validate Evidence",
+        "description": "Re-validate registered evidence.",
+        "operationId": "validate_evidence_api_v1_evidence__evidence_id__validate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceValidationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/verify-integrity": {
+      "post": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Verify Evidence Integrity",
+        "description": "Verify multi-hash integrity and record an ACCESS custody action.",
+        "operationId": "verify_evidence_integrity_api_v1_evidence__evidence_id__verify_integrity_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrityVerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/custody": {
+      "get": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Get Custody Chain",
+        "description": "Return the ordered chain-of-custody for an evidence item.",
+        "operationId": "get_custody_chain_api_v1_evidence__evidence_id__custody_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustodyChainResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/status": {
+      "get": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Get Evidence Status",
+        "description": "Return current evidence status and history.",
+        "operationId": "get_evidence_status_api_v1_evidence__evidence_id__status_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/quarantine": {
+      "post": {
+        "tags": [
+          "Evidence Management"
+        ],
+        "summary": "Quarantine Evidence",
+        "description": "Quarantine evidence for operational safety.",
+        "operationId": "quarantine_evidence_api_v1_evidence__evidence_id__quarantine_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuarantineEvidenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence": {
+      "get": {
+        "tags": [
+          "Evidence"
+        ],
+        "summary": "List Evidence",
+        "description": "List all registered evidence.",
+        "operationId": "list_evidence_api_v1_evidence_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Evidence Api V1 Evidence Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Evidence"
+        ],
+        "summary": "Register Evidence",
+        "description": "Register evidence for analysis.",
+        "operationId": "register_evidence_api_v1_evidence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evidence/{evidence_id}": {
+      "get": {
+        "tags": [
+          "Evidence"
+        ],
+        "summary": "Get Evidence",
+        "description": "Get evidence metadata by ID.",
+        "operationId": "get_evidence_api_v1_evidence__evidence_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Evidence"
+        ],
+        "summary": "Delete Evidence",
+        "description": "Delete evidence metadata (original file is retained on disk).",
+        "operationId": "delete_evidence_api_v1_evidence__evidence_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis": {
+      "post": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Run Analysis",
+        "description": "Run the analysis pipeline for registered evidence.",
+        "operationId": "run_analysis_api_v1_analysis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analysis/{pipeline_id}": {
+      "get": {
+        "tags": [
+          "Analysis"
+        ],
+        "summary": "Get Analysis Status",
+        "description": "Get pipeline status by pipeline ID.",
+        "operationId": "get_analysis_status_api_v1_analysis__pipeline_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/classify": {
+      "post": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Classify Artefacts",
+        "description": "Run AI (or rule-based) classification on an evidence artefact set.",
+        "operationId": "classify_artefacts_api_v1_ai_classify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/summarize": {
+      "post": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Summarize Evidence",
+        "description": "Generate an investigative summary for an evidence artefact set.",
+        "operationId": "summarize_evidence_api_v1_ai_summarize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummarizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummarizeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/explain/{artefact_id}": {
+      "post": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Explain Artefact",
+        "description": "Explain a specific artefact via the local LLM explainer.",
+        "operationId": "explain_artefact_api_v1_ai_explain__artefact_id__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "artefact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artefact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/ask": {
+      "post": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Ask Question",
+        "description": "Ask a natural-language question about evidence artefacts.",
+        "operationId": "ask_question_api_v1_ai_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/health": {
+      "get": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Ai Health",
+        "description": "Check local LLM / Ollama health (no authentication required).",
+        "operationId": "ai_health_api_v1_ai_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/stats": {
+      "get": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Ai Stats",
+        "description": "Return aggregated AI usage statistics (admin only).",
+        "operationId": "ai_stats_api_v1_ai_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIStatsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/cache/stats": {
+      "get": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Ai Cache Stats",
+        "description": "Return AI response-cache statistics (admin only).",
+        "operationId": "ai_cache_stats_api_v1_ai_cache_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICacheStatsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/cache": {
+      "delete": {
+        "tags": [
+          "AI Analysis"
+        ],
+        "summary": "Clear Ai Cache",
+        "description": "Clear the AI response cache (admin only).",
+        "operationId": "clear_ai_cache_api_v1_ai_cache_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AICacheClearResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/pipeline/run": {
+      "post": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "Run Pipeline",
+        "description": "Submit a pipeline job for asynchronous execution.",
+        "operationId": "run_pipeline_api_v1_pipeline_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/pipeline/jobs": {
+      "get": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "List Pipeline Jobs",
+        "description": "List pipeline jobs with optional status and case filters.",
+        "operationId": "list_pipeline_jobs_api_v1_pipeline_jobs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineJob"
+                  },
+                  "title": "Response List Pipeline Jobs Api V1 Pipeline Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/parsers": {
+      "get": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "List Parsers",
+        "description": "List registered artefact parsers and availability status.",
+        "operationId": "list_parsers_api_v1_pipeline_parsers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParserListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/pipeline/{job_id}": {
+      "get": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "Get Pipeline Job",
+        "description": "Get a pipeline job including stage execution details.",
+        "operationId": "get_pipeline_job_api_v1_pipeline__job_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/{job_id}/progress": {
+      "get": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "Get Pipeline Progress",
+        "description": "Get real-time progress for a pipeline job.",
+        "operationId": "get_pipeline_progress_api_v1_pipeline__job_id__progress_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineProgress"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "Pipeline"
+        ],
+        "summary": "Cancel Pipeline Job",
+        "description": "Cancel a queued or running pipeline job (owner or admin).",
+        "operationId": "cancel_pipeline_job_api_v1_pipeline__job_id__cancel_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/compare": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Compare Reports",
+        "description": "Compare two reports for artefact-layer reproducibility.",
+        "operationId": "compare_reports_api_v1_reports_compare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReproducibilityCompareResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/reports/{report_id}": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Get Report",
+        "description": "Get full forensic report summary metadata.",
+        "operationId": "get_report_api_v1_reports__report_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/json": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Get Report Json",
+        "description": "Get the JSON report component only.",
+        "operationId": "get_report_json_api_v1_reports__report_id__json_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Report Json Api V1 Reports  Report Id  Json Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/narrative": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Get Report Narrative",
+        "description": "Get the narrative report component only.",
+        "operationId": "get_report_narrative_api_v1_reports__report_id__narrative_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/export/pdf": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Export Report Pdf",
+        "description": "Download the PDF (or plaintext fallback) export of a report.",
+        "operationId": "export_report_pdf_api_v1_reports__report_id__export_pdf_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/export/html": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Export Report Html",
+        "description": "Download the HTML export of a report.",
+        "operationId": "export_report_html_api_v1_reports__report_id__export_html_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/export/json-file": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Export Report Json File",
+        "description": "Download the verified JSON file export of a report.",
+        "operationId": "export_report_json_file_api_v1_reports__report_id__export_json_file_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/verify": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Verify Report Integrity",
+        "description": "Verify integrity of the structured JSON report layer.",
+        "operationId": "verify_report_integrity_api_v1_reports__report_id__verify_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrityVerifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/custody": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Get Report Custody",
+        "description": "Get the chain-of-custody report for the report's evidence.",
+        "operationId": "get_report_custody_api_v1_reports__report_id__custody_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Report Custody Api V1 Reports  Report Id  Custody Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{report_id}/audit-trail": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Get Report Audit Trail",
+        "description": "Get the audit trail report for the report's evidence.",
+        "operationId": "get_report_audit_trail_api_v1_reports__report_id__audit_trail_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Report Audit Trail Api V1 Reports  Report Id  Audit Trail Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/benchmark": {
+      "post": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Run Benchmark",
+        "description": "Run benchmark comparison against a local ground-truth dataset.",
+        "operationId": "run_benchmark_api_v1_evaluation_benchmark_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluation/benchmark/results": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "List Benchmark Results",
+        "description": "List all stored benchmark results.",
+        "operationId": "list_benchmark_results_api_v1_evaluation_benchmark_results_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Benchmark Results Api V1 Evaluation Benchmark Results Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluation/benchmark/results/{benchmark_id}": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Get Benchmark Result",
+        "description": "Get a specific benchmark result by ID.",
+        "operationId": "get_benchmark_result_api_v1_evaluation_benchmark_results__benchmark_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "benchmark_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Benchmark Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/benchmark/performance": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Get Benchmark Performance",
+        "description": "Return performance analytics for a dataset's historical runs.",
+        "operationId": "get_benchmark_performance_api_v1_evaluation_benchmark_performance_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Dataset Name"
+            }
+          },
+          {
+            "name": "baseline_ttt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Baseline Ttt"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Benchmark Performance Api V1 Evaluation Benchmark Performance Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/benchmark/datasets": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "List Benchmark Datasets",
+        "description": "List available local DFRWS/CFReDS ground-truth datasets.",
+        "operationId": "list_benchmark_datasets_api_v1_evaluation_benchmark_datasets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluation/usability/respond": {
+      "post": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Submit Usability Response",
+        "description": "Submit an anonymised usability questionnaire response (no auth).",
+        "operationId": "submit_usability_response_api_v1_evaluation_usability_respond_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsabilityRespondRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsabilitySubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/usability/questionnaire": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Get Usability Questionnaire",
+        "description": "Return the ethics-locked questionnaire instrument definition.",
+        "operationId": "get_usability_questionnaire_api_v1_evaluation_usability_questionnaire_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Usability Questionnaire Api V1 Evaluation Usability Questionnaire Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluation/usability/results": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Get Usability Results",
+        "description": "Return usability analysis results (admin/investigator only).",
+        "operationId": "get_usability_results_api_v1_evaluation_usability_results_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Usability Results Api V1 Evaluation Usability Results Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluation/usability/export": {
+      "get": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Export Usability Responses",
+        "description": "Export anonymised usability responses (admin only).",
+        "operationId": "export_usability_responses_api_v1_evaluation_usability_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluation/usability/responses": {
+      "delete": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "Delete Usability Responses",
+        "description": "Delete all usability responses (ethics data destruction; admin only).",
+        "operationId": "delete_usability_responses_api_v1_evaluation_usability_responses_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsabilityDeleteResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/monitoring/uptime": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Uptime",
+        "description": "Public uptime and version (no auth required).",
+        "operationId": "uptime_api_v1_monitoring_uptime_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UptimeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/monitoring/metrics": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Metrics",
+        "description": "Runtime metrics summary (admin only).",
+        "operationId": "metrics_api_v1_monitoring_metrics_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since_minutes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1440,
+              "minimum": 1,
+              "default": 60,
+              "title": "Since Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/monitoring/logs": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Logs",
+        "description": "Recent log entries filtered by level (admin only).",
+        "operationId": "logs_api_v1_monitoring_logs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
+              "default": "WARNING",
+              "title": "Level"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AICacheClearResponse": {
+        "properties": {
+          "cleared_entries": {
+            "type": "integer",
+            "title": "Cleared Entries"
+          },
+          "cleared_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Cleared At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cleared_entries",
+          "cleared_at"
+        ],
+        "title": "AICacheClearResponse",
+        "description": "Result of clearing the AI response cache."
+      },
+      "AICacheStatsResponse": {
+        "properties": {
+          "total_hits": {
+            "type": "integer",
+            "title": "Total Hits",
+            "default": 0
+          },
+          "total_misses": {
+            "type": "integer",
+            "title": "Total Misses",
+            "default": 0
+          },
+          "hit_rate": {
+            "type": "number",
+            "title": "Hit Rate",
+            "default": 0.0
+          },
+          "current_size": {
+            "type": "integer",
+            "title": "Current Size",
+            "default": 0
+          },
+          "max_size": {
+            "type": "integer",
+            "title": "Max Size",
+            "default": 0
+          },
+          "evictions": {
+            "type": "integer",
+            "title": "Evictions",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "AICacheStatsResponse",
+        "description": "AI response-cache statistics response."
+      },
+      "AIHealthResponse": {
+        "properties": {
+          "is_healthy": {
+            "type": "boolean",
+            "title": "Is Healthy"
+          },
+          "model_loaded": {
+            "type": "boolean",
+            "title": "Model Loaded"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "response_time_ms": {
+            "type": "number",
+            "title": "Response Time Ms"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_healthy",
+          "model_loaded",
+          "model_name",
+          "response_time_ms"
+        ],
+        "title": "AIHealthResponse",
+        "description": "AI engine health probe response (extends ``LLMHealthStatus``)."
+      },
+      "AIStatsResponse": {
+        "properties": {
+          "total_requests": {
+            "type": "integer",
+            "title": "Total Requests",
+            "default": 0
+          },
+          "total_tokens_in": {
+            "type": "integer",
+            "title": "Total Tokens In",
+            "default": 0
+          },
+          "total_tokens_out": {
+            "type": "integer",
+            "title": "Total Tokens Out",
+            "default": 0
+          },
+          "avg_response_time_ms": {
+            "type": "number",
+            "title": "Avg Response Time Ms",
+            "default": 0.0
+          },
+          "cache_hit_rate": {
+            "type": "number",
+            "title": "Cache Hit Rate",
+            "default": 0.0
+          },
+          "hallucination_detections": {
+            "type": "integer",
+            "title": "Hallucination Detections",
+            "default": 0
+          },
+          "avg_confidence": {
+            "type": "number",
+            "title": "Avg Confidence",
+            "default": 0.0
+          },
+          "requests_by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Requests By Type"
+          }
+        },
+        "type": "object",
+        "title": "AIStatsResponse",
+        "description": "AI usage statistics response (extends ``AIUsageStats``)."
+      },
+      "AddEvidenceToCaseRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Evidence Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "AddEvidenceToCaseRequest",
+        "description": "Request body for linking evidence to a case."
+      },
+      "AnalysisRunRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "mode": {
+            "type": "string",
+            "pattern": "^(full|parse-only|triage-only)$",
+            "title": "Mode",
+            "default": "full"
+          },
+          "use_fallback": {
+            "type": "boolean",
+            "title": "Use Fallback",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "AnalysisRunRequest",
+        "description": "Request body for starting a pipeline analysis run."
+      },
+      "AnalysisStatusResponse": {
+        "properties": {
+          "pipeline_id": {
+            "type": "string",
+            "title": "Pipeline Id"
+          },
+          "current_stage": {
+            "type": "string",
+            "title": "Current Stage"
+          },
+          "is_complete": {
+            "type": "boolean",
+            "title": "Is Complete"
+          },
+          "stage_results": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stage Results"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pipeline_id",
+          "current_stage",
+          "is_complete"
+        ],
+        "title": "AnalysisStatusResponse",
+        "description": "Pipeline analysis status response."
+      },
+      "ArtefactCategory": {
+        "type": "string",
+        "enum": [
+          "filesystem_metadata",
+          "registry_key",
+          "browser_history",
+          "event_log",
+          "running_process",
+          "network_connection",
+          "injected_code"
+        ],
+        "title": "ArtefactCategory",
+        "description": "Category of extracted forensic artefact."
+      },
+      "ArtefactExplanation": {
+        "properties": {
+          "artefact_id": {
+            "type": "string",
+            "title": "Artefact Id"
+          },
+          "explanation_text": {
+            "type": "string",
+            "title": "Explanation Text"
+          },
+          "forensic_significance": {
+            "type": "string",
+            "title": "Forensic Significance",
+            "default": ""
+          },
+          "suggested_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Actions"
+          },
+          "related_artefact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Artefact Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "artefact_id",
+          "explanation_text"
+        ],
+        "title": "ArtefactExplanation",
+        "description": "Human-readable explanation of a single ranked artefact."
+      },
+      "AskRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "conversation_history": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "question"
+        ],
+        "title": "AskRequest",
+        "description": "Request body for ``POST /ai/ask``."
+      },
+      "AskResponse": {
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/QAResponse"
+          },
+          "analysis_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Record Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "response"
+        ],
+        "title": "AskResponse",
+        "description": "Investigator Q&A payload."
+      },
+      "AssignInvestigatorRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "member"
+            ],
+            "title": "Role",
+            "default": "member"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "AssignInvestigatorRequest",
+        "description": "Request body for assigning an investigator to a case."
+      },
+      "BenchmarkResponse": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          },
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name",
+            "default": ""
+          },
+          "precision": {
+            "type": "number",
+            "title": "Precision"
+          },
+          "recall": {
+            "type": "number",
+            "title": "Recall"
+          },
+          "f1_score": {
+            "type": "number",
+            "title": "F1 Score"
+          },
+          "time_to_triage_seconds": {
+            "type": "number",
+            "title": "Time To Triage Seconds"
+          },
+          "artefacts_expected": {
+            "type": "integer",
+            "title": "Artefacts Expected"
+          },
+          "artefacts_recovered": {
+            "type": "integer",
+            "title": "Artefacts Recovered"
+          },
+          "false_positives": {
+            "type": "integer",
+            "title": "False Positives",
+            "default": 0
+          },
+          "false_negatives": {
+            "type": "integer",
+            "title": "False Negatives",
+            "default": 0
+          },
+          "evaluated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id",
+          "precision",
+          "recall",
+          "f1_score",
+          "time_to_triage_seconds",
+          "artefacts_expected",
+          "artefacts_recovered"
+        ],
+        "title": "BenchmarkResponse",
+        "description": "Benchmark evaluation response."
+      },
+      "BenchmarkRunRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "ground_truth_dataset": {
+            "type": "string",
+            "title": "Ground Truth Dataset",
+            "default": ""
+          },
+          "dataset_source": {
+            "type": "string",
+            "enum": [
+              "dfrws",
+              "cfreds"
+            ],
+            "title": "Dataset Source",
+            "default": "dfrws"
+          },
+          "ground_truth_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ground Truth Path"
+          },
+          "dataset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "BenchmarkRunRequest",
+        "description": "Request body for running a benchmark evaluation."
+      },
+      "Body_login_api_v1_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_api_v1_auth_login_post"
+      },
+      "CaseListResponse": {
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseResponse"
+            },
+            "type": "array",
+            "title": "Cases"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cases",
+          "total"
+        ],
+        "title": "CaseListResponse",
+        "description": "Paginated-style case list wrapper."
+      },
+      "CaseResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStatus"
+          },
+          "lead_investigator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Investigator Id"
+          },
+          "investigators": {
+            "items": {
+              "$ref": "#/components/schemas/InvestigatorResponse"
+            },
+            "type": "array",
+            "title": "Investigators"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "evidence_count": {
+            "type": "integer",
+            "title": "Evidence Count",
+            "default": 0
+          },
+          "investigator_count": {
+            "type": "integer",
+            "title": "Investigator Count",
+            "default": 0
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "closure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Reason"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_name",
+          "status",
+          "created_at"
+        ],
+        "title": "CaseResponse",
+        "description": "Case detail response."
+      },
+      "CaseStatus": {
+        "type": "string",
+        "enum": [
+          "created",
+          "open",
+          "active",
+          "under_review",
+          "closed",
+          "archived"
+        ],
+        "title": "CaseStatus",
+        "description": "Investigation case lifecycle status."
+      },
+      "CaseSummaryResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "lead_investigator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Investigator Id"
+          },
+          "investigators": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Investigators"
+          },
+          "investigator_count": {
+            "type": "integer",
+            "title": "Investigator Count",
+            "default": 0
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Ids"
+          },
+          "evidence_count": {
+            "type": "integer",
+            "title": "Evidence Count",
+            "default": 0
+          },
+          "evidence_summaries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Evidence Summaries"
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "closure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Reason"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_name",
+          "status",
+          "created_at"
+        ],
+        "title": "CaseSummaryResponse",
+        "description": "Comprehensive case summary response."
+      },
+      "CaseTransitionRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "CaseTransitionRequest",
+        "description": "Request body for case transitions that require a reason."
+      },
+      "ClassificationResult": {
+        "properties": {
+          "artefact_id": {
+            "type": "string",
+            "title": "Artefact Id"
+          },
+          "suspicion_level": {
+            "$ref": "#/components/schemas/SuspicionLevel"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning"
+          },
+          "ioc_indicators": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ioc Indicators"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "raw_llm_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Llm Response"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version",
+            "default": "1.0.0"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artefact_id",
+          "suspicion_level",
+          "reasoning"
+        ],
+        "title": "ClassificationResult",
+        "description": "Structured classification outcome for a single artefact."
+      },
+      "ClassifyRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "use_fallback": {
+            "type": "boolean",
+            "title": "Use Fallback",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "ClassifyRequest",
+        "description": "Request body for ``POST /ai/classify``."
+      },
+      "ClassifyResponse": {
+        "properties": {
+          "classifications": {
+            "items": {
+              "$ref": "#/components/schemas/ClassificationResult"
+            },
+            "type": "array",
+            "title": "Classifications"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used"
+          },
+          "analysis_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Record Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_used"
+        ],
+        "title": "ClassifyResponse",
+        "description": "Classification outcomes for an evidence artefact set."
+      },
+      "CreateCaseRequest": {
+        "properties": {
+          "case_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Case Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_name"
+        ],
+        "title": "CreateCaseRequest",
+        "description": "Request body for creating an investigation case."
+      },
+      "CustodyChainEntryResponse": {
+        "properties": {
+          "entry_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Number"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "performed_by_user_id": {
+            "type": "string",
+            "title": "Performed By User Id"
+          },
+          "performed_by_name": {
+            "type": "string",
+            "title": "Performed By Name"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "hash_at_action": {
+            "type": "string",
+            "title": "Hash At Action"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "default": "DFAT Local System"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "action",
+          "performed_by_user_id",
+          "performed_by_name",
+          "timestamp",
+          "reason",
+          "hash_at_action"
+        ],
+        "title": "CustodyChainEntryResponse",
+        "description": "Single custody chain entry."
+      },
+      "CustodyChainResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CustodyChainEntryResponse"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "total_entries": {
+            "type": "integer",
+            "title": "Total Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "entries",
+          "total_entries"
+        ],
+        "title": "CustodyChainResponse",
+        "description": "Ordered custody chain for an evidence item."
+      },
+      "DatasetListResponse": {
+        "properties": {
+          "dfrws": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dfrws"
+          },
+          "cfreds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cfreds"
+          }
+        },
+        "type": "object",
+        "title": "DatasetListResponse",
+        "description": "Available local ground-truth datasets."
+      },
+      "DetailedHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds"
+          },
+          "python_version": {
+            "type": "string",
+            "title": "Python Version"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "package_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Package Versions"
+          },
+          "database_table_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Database Table Counts"
+          },
+          "memory_usage_mb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Usage Mb"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Checks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "timestamp",
+          "uptime_seconds",
+          "python_version",
+          "platform"
+        ],
+        "title": "DetailedHealthResponse",
+        "description": "Admin-only detailed system information."
+      },
+      "EvidenceDetailResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "evidence_type": {
+            "type": "string",
+            "title": "Evidence Type"
+          },
+          "original_hash": {
+            "type": "string",
+            "title": "Original Hash"
+          },
+          "hash_algorithm": {
+            "type": "string",
+            "title": "Hash Algorithm"
+          },
+          "file_size_bytes": {
+            "type": "integer",
+            "title": "File Size Bytes"
+          },
+          "acquired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquired At"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "case_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Status"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "status_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Status History"
+          },
+          "custody_chain": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Custody Chain"
+          },
+          "custody_actions_count": {
+            "type": "integer",
+            "title": "Custody Actions Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "file_path",
+          "evidence_type",
+          "original_hash",
+          "hash_algorithm",
+          "file_size_bytes",
+          "case_id",
+          "case_name"
+        ],
+        "title": "EvidenceDetailResponse",
+        "description": "Comprehensive evidence detail response."
+      },
+      "EvidenceInventoryItemResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EvidenceStatus"
+          },
+          "hash_set": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash Set"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "file_size_bytes": {
+            "type": "integer",
+            "title": "File Size Bytes"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "custody_actions_count": {
+            "type": "integer",
+            "title": "Custody Actions Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "case_id",
+          "case_name",
+          "file_name",
+          "evidence_type",
+          "status",
+          "file_size_bytes",
+          "registered_at"
+        ],
+        "title": "EvidenceInventoryItemResponse",
+        "description": "Single inventory row."
+      },
+      "EvidenceInventoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceInventoryItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EvidenceInventoryResponse",
+        "description": "Evidence inventory list response."
+      },
+      "EvidenceResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "original_hash": {
+            "type": "string",
+            "title": "Original Hash"
+          },
+          "case": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Case"
+          },
+          "registered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "file_path",
+          "evidence_type",
+          "original_hash",
+          "case"
+        ],
+        "title": "EvidenceResponse",
+        "description": "Evidence metadata response."
+      },
+      "EvidenceStatisticsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Type"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Status"
+          },
+          "total_size": {
+            "type": "integer",
+            "title": "Total Size"
+          },
+          "avg_custody_chain_length": {
+            "type": "number",
+            "title": "Avg Custody Chain Length"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "total_size",
+          "avg_custody_chain_length"
+        ],
+        "title": "EvidenceStatisticsResponse",
+        "description": "Aggregated evidence statistics."
+      },
+      "EvidenceStatus": {
+        "type": "string",
+        "enum": [
+          "registered",
+          "validating",
+          "validated",
+          "processing",
+          "processed",
+          "quarantined",
+          "archived"
+        ],
+        "title": "EvidenceStatus",
+        "description": "Evidence item processing status within a case."
+      },
+      "EvidenceStatusHistoryEntry": {
+        "properties": {
+          "previous_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Status"
+          },
+          "new_status": {
+            "type": "string",
+            "title": "New Status"
+          },
+          "changed_by_user_id": {
+            "type": "string",
+            "title": "Changed By User Id"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_status",
+          "changed_by_user_id",
+          "changed_at",
+          "reason"
+        ],
+        "title": "EvidenceStatusHistoryEntry",
+        "description": "Single evidence status history entry."
+      },
+      "EvidenceStatusResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "current_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceStatusHistoryEntry"
+            },
+            "type": "array",
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "EvidenceStatusResponse",
+        "description": "Current evidence status and history."
+      },
+      "EvidenceType": {
+        "type": "string",
+        "enum": [
+          "disk_image",
+          "memory_dump"
+        ],
+        "title": "EvidenceType",
+        "description": "Type of forensic evidence under analysis."
+      },
+      "EvidenceUploadRequest": {
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "investigator": {
+            "type": "string",
+            "title": "Investigator"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_path",
+          "case_name",
+          "investigator",
+          "evidence_type"
+        ],
+        "title": "EvidenceUploadRequest",
+        "description": "Request body for registering forensic evidence."
+      },
+      "EvidenceValidationResponse": {
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "validation_passed": {
+            "type": "boolean",
+            "title": "Validation Passed"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "custody_record": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custody Record"
+          },
+          "validation_failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Validation Failures"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "validation_passed"
+        ],
+        "title": "EvidenceValidationResponse",
+        "description": "Register/validate workflow or re-validation response."
+      },
+      "ExplainResponse": {
+        "properties": {
+          "explanation": {
+            "$ref": "#/components/schemas/ArtefactExplanation"
+          },
+          "analysis_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Record Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "explanation"
+        ],
+        "title": "ExplainResponse",
+        "description": "Per-artefact explanation payload."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HallucinationReport": {
+        "properties": {
+          "hallucinated_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hallucinated Ids"
+          },
+          "fabricated_terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fabricated Terms"
+          },
+          "unsupported_assertions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unsupported Assertions"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level",
+            "default": "low"
+          },
+          "clean_response": {
+            "type": "string",
+            "title": "Clean Response",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "HallucinationReport",
+        "description": "Outcome of a hallucination scan over LLM text."
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "healthy"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "description": "Basic liveness response."
+      },
+      "IntegrityVerificationResponse": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "integrity_verified": {
+            "type": "boolean",
+            "title": "Integrity Verified"
+          },
+          "hash_set": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Hash Set"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "discrepancies": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Discrepancies"
+          },
+          "custody_record": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custody Record"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "integrity_verified",
+          "timestamp"
+        ],
+        "title": "IntegrityVerificationResponse",
+        "description": "Integrity verification result."
+      },
+      "IntegrityVerifyResponse": {
+        "properties": {
+          "is_valid": {
+            "type": "boolean",
+            "title": "Is Valid"
+          },
+          "integrity_hash_match": {
+            "type": "boolean",
+            "title": "Integrity Hash Match"
+          },
+          "schema_version_valid": {
+            "type": "boolean",
+            "title": "Schema Version Valid"
+          },
+          "report_id_valid": {
+            "type": "boolean",
+            "title": "Report Id Valid"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Verified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_valid",
+          "integrity_hash_match",
+          "schema_version_valid",
+          "report_id_valid",
+          "verified_at"
+        ],
+        "title": "IntegrityVerifyResponse",
+        "description": "Report integrity verification outcome."
+      },
+      "InvestigatorResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "member"
+            ],
+            "title": "Role"
+          },
+          "assigned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Assigned At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "full_name",
+          "role",
+          "assigned_at"
+        ],
+        "title": "InvestigatorResponse",
+        "description": "Investigator assignment in API responses."
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "initialising",
+          "running",
+          "stage_complete",
+          "completed",
+          "failed",
+          "cancelled",
+          "timed_out"
+        ],
+        "title": "JobStatus",
+        "description": "Lifecycle status for a scheduled pipeline job."
+      },
+      "LogEntry": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "level",
+          "message"
+        ],
+        "title": "LogEntry",
+        "description": "A single log entry returned from the logs endpoint."
+      },
+      "LogsResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries",
+          "total"
+        ],
+        "title": "LogsResponse",
+        "description": "Paginated log entries response."
+      },
+      "MetricsSummary": {
+        "properties": {
+          "requests_total": {
+            "type": "integer",
+            "title": "Requests Total",
+            "default": 0
+          },
+          "requests_per_minute": {
+            "type": "number",
+            "title": "Requests Per Minute",
+            "default": 0.0
+          },
+          "avg_response_time_ms": {
+            "type": "number",
+            "title": "Avg Response Time Ms",
+            "default": 0.0
+          },
+          "error_rate": {
+            "type": "number",
+            "title": "Error Rate",
+            "default": 0.0
+          },
+          "pipeline_runs": {
+            "type": "integer",
+            "title": "Pipeline Runs",
+            "default": 0
+          },
+          "avg_pipeline_duration_s": {
+            "type": "number",
+            "title": "Avg Pipeline Duration S",
+            "default": 0.0
+          },
+          "ai_requests": {
+            "type": "integer",
+            "title": "Ai Requests",
+            "default": 0
+          },
+          "ai_avg_latency_ms": {
+            "type": "number",
+            "title": "Ai Avg Latency Ms",
+            "default": 0.0
+          },
+          "active_cases": {
+            "type": "integer",
+            "title": "Active Cases",
+            "default": 0
+          },
+          "total_evidence": {
+            "type": "integer",
+            "title": "Total Evidence",
+            "default": 0
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds",
+            "default": 0.0
+          },
+          "memory_usage_mb": {
+            "type": "number",
+            "title": "Memory Usage Mb",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "MetricsSummary",
+        "description": "Snapshot of runtime metrics."
+      },
+      "ParserInfoResponse": {
+        "properties": {
+          "parser_name": {
+            "type": "string",
+            "title": "Parser Name"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "supported_evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Evidence Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parser_name",
+          "available"
+        ],
+        "title": "ParserInfoResponse",
+        "description": "Single artefact parser availability entry."
+      },
+      "ParserListResponse": {
+        "properties": {
+          "parsers": {
+            "items": {
+              "$ref": "#/components/schemas/ParserInfoResponse"
+            },
+            "type": "array",
+            "title": "Parsers"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ParserListResponse",
+        "description": "List of registered artefact parsers."
+      },
+      "ParserResult": {
+        "properties": {
+          "parser_name": {
+            "type": "string",
+            "title": "Parser Name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ParserStatus"
+          },
+          "artefacts_found": {
+            "type": "integer",
+            "title": "Artefacts Found",
+            "default": 0
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duration Seconds",
+            "default": 0.0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ArtefactCategory"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parser_name",
+          "status",
+          "category"
+        ],
+        "title": "ParserResult",
+        "description": "Outcome of a single artefact parser invocation within a stage.\n\nAttributes:\n    parser_name: Parser identifier (e.g. ``FileSystemParser``).\n    status: Parser availability/execution status.\n    artefacts_found: Number of artefacts produced.\n    duration_seconds: Parser wall-clock duration.\n    error: Optional error message on failure.\n    category: Primary artefact category for this parser."
+      },
+      "ParserStatus": {
+        "type": "string",
+        "enum": [
+          "available",
+          "unavailable",
+          "running",
+          "completed",
+          "failed",
+          "skipped"
+        ],
+        "title": "ParserStatus",
+        "description": "Availability and execution status for an artefact parser."
+      },
+      "PasswordChangeRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 12,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChangeRequest",
+        "description": "Authenticated password change request."
+      },
+      "PipelineJob": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "default": "queued"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "full"
+          },
+          "use_fallback_analyzer": {
+            "type": "boolean",
+            "title": "Use Fallback Analyzer",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "total_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Duration Seconds"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineStage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage_executions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StageExecution"
+            },
+            "type": "object",
+            "title": "Stage Executions"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "artefact_count": {
+            "type": "integer",
+            "title": "Artefact Count",
+            "default": 0
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "case_id",
+          "user_id"
+        ],
+        "title": "PipelineJob",
+        "description": "Scheduled forensic pipeline job with stage execution tracking.\n\nAttributes:\n    job_id: Unique job identifier.\n    evidence_id: Target evidence identifier.\n    case_id: Owning case identifier.\n    user_id: Submitting user identifier.\n    status: Job lifecycle status.\n    mode: Run mode (``full``, ``parse-only``, ``triage-only``).\n    use_fallback_analyzer: Force rule-based triage.\n    created_at: UTC creation timestamp.\n    started_at: UTC start timestamp.\n    completed_at: UTC completion timestamp.\n    total_duration_seconds: End-to-end duration when complete.\n    current_stage: Stage currently executing or last reached.\n    stage_executions: Per-stage execution records keyed by stage value.\n    error_message: Top-level failure message when failed.\n    artefact_count: Total artefacts recovered so far.\n    report_id: Linked forensic report identifier when available."
+      },
+      "PipelineProgress": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stage"
+          },
+          "stages_completed": {
+            "type": "integer",
+            "title": "Stages Completed",
+            "default": 0
+          },
+          "stages_total": {
+            "type": "integer",
+            "title": "Stages Total",
+            "default": 5
+          },
+          "current_parser": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Parser"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "title": "Elapsed Seconds",
+            "default": 0.0
+          },
+          "estimated_remaining_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Remaining Seconds"
+          },
+          "artefacts_found_so_far": {
+            "type": "integer",
+            "title": "Artefacts Found So Far",
+            "default": 0
+          },
+          "percent_complete": {
+            "type": "number",
+            "title": "Percent Complete",
+            "description": "Return completion percentage based on stages completed/total.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "percent_complete"
+        ],
+        "title": "PipelineProgress",
+        "description": "Snapshot of pipeline job progress for monitoring APIs.\n\nAttributes:\n    job_id: Related job identifier.\n    status: Current job status.\n    current_stage: Current stage name (string) when running.\n    stages_completed: Number of stages finished.\n    stages_total: Total stages in the pipeline (default 5).\n    percent_complete: Computed completion percentage.\n    current_parser: Parser currently running, if any.\n    elapsed_seconds: Elapsed wall-clock seconds.\n    estimated_remaining_seconds: Optional ETA remaining.\n    artefacts_found_so_far: Artefacts recovered to date."
+      },
+      "PipelineRunRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "mode": {
+            "type": "string",
+            "pattern": "^(full|parse-only|triage-only)$",
+            "title": "Mode",
+            "default": "full"
+          },
+          "use_fallback": {
+            "type": "boolean",
+            "title": "Use Fallback",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "case_id"
+        ],
+        "title": "PipelineRunRequest",
+        "description": "Request body for submitting a pipeline job."
+      },
+      "PipelineStage": {
+        "type": "string",
+        "enum": [
+          "acquisition",
+          "parsing",
+          "ai_triage",
+          "reporting",
+          "evaluation"
+        ],
+        "title": "PipelineStage",
+        "description": "Five-stage forensic processing pipeline stages."
+      },
+      "QAResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "referenced_artefact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Referenced Artefact Ids"
+          },
+          "hallucination_check": {
+            "$ref": "#/components/schemas/HallucinationReport"
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "hallucination_check",
+          "model_used",
+          "question"
+        ],
+        "title": "QAResponse",
+        "description": "Grounded answer to an investigator question."
+      },
+      "QuarantineEvidenceRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "QuarantineEvidenceRequest",
+        "description": "Request body for quarantining evidence."
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Checks"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checks",
+          "timestamp"
+        ],
+        "title": "ReadinessResponse",
+        "description": "Readiness probe with component checks."
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest",
+        "description": "Refresh-token exchange request."
+      },
+      "RegisterEvidenceRequest": {
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "File Path"
+          },
+          "case_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Case Id"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_path",
+          "case_id",
+          "evidence_type"
+        ],
+        "title": "RegisterEvidenceRequest",
+        "description": "Request body for register-and-validate evidence workflow."
+      },
+      "RegisterRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "title": "Password"
+          },
+          "full_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Full Name"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name",
+            "default": "analyst"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password",
+          "full_name"
+        ],
+        "title": "RegisterRequest",
+        "description": "New investigator account registration request."
+      },
+      "ReportCompareRequest": {
+        "properties": {
+          "report_id_a": {
+            "type": "string",
+            "title": "Report Id A"
+          },
+          "report_id_b": {
+            "type": "string",
+            "title": "Report Id B"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id_a",
+          "report_id_b"
+        ],
+        "title": "ReportCompareRequest",
+        "description": "Request body for reproducibility comparison of two reports."
+      },
+      "ReportResponse": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "case_name": {
+            "type": "string",
+            "title": "Case Name"
+          },
+          "json_report_url": {
+            "type": "string",
+            "title": "Json Report Url"
+          },
+          "narrative_report_url": {
+            "type": "string",
+            "title": "Narrative Report Url"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "pipeline_duration_seconds": {
+            "type": "number",
+            "title": "Pipeline Duration Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "case_name",
+          "json_report_url",
+          "narrative_report_url",
+          "generated_at",
+          "pipeline_duration_seconds"
+        ],
+        "title": "ReportResponse",
+        "description": "Forensic report summary response."
+      },
+      "ReproducibilityCompareResponse": {
+        "properties": {
+          "is_reproducible": {
+            "type": "boolean",
+            "title": "Is Reproducible"
+          },
+          "hash_a": {
+            "type": "string",
+            "title": "Hash A"
+          },
+          "hash_b": {
+            "type": "string",
+            "title": "Hash B"
+          },
+          "hashes_match": {
+            "type": "boolean",
+            "title": "Hashes Match"
+          },
+          "artefact_count_match": {
+            "type": "boolean",
+            "title": "Artefact Count Match"
+          },
+          "category_distribution_match": {
+            "type": "boolean",
+            "title": "Category Distribution Match"
+          },
+          "suspicion_distribution_match": {
+            "type": "boolean",
+            "title": "Suspicion Distribution Match"
+          },
+          "differences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Differences"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Verified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_reproducible",
+          "hash_a",
+          "hash_b",
+          "hashes_match",
+          "artefact_count_match",
+          "category_distribution_match",
+          "suspicion_distribution_match",
+          "verified_at"
+        ],
+        "title": "ReproducibilityCompareResponse",
+        "description": "Reproducibility comparison of two reports."
+      },
+      "StageExecution": {
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/PipelineStage"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StageStatus",
+            "default": "pending"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "output_summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Summary"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "parser_results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ParserResult"
+            },
+            "type": "object",
+            "title": "Parser Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "title": "StageExecution",
+        "description": "Execution record for one pipeline stage within a job.\n\nAttributes:\n    stage: Pipeline stage being executed.\n    status: Stage execution status.\n    started_at: UTC start timestamp.\n    completed_at: UTC completion timestamp.\n    duration_seconds: Stage wall-clock duration.\n    output_summary: Stage-specific summary payload.\n    errors: Collected error messages.\n    parser_results: Per-parser results keyed by parser name."
+      },
+      "StageStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "skipped"
+        ],
+        "title": "StageStatus",
+        "description": "Execution status for a single pipeline stage."
+      },
+      "SummarizeRequest": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "use_fallback": {
+            "type": "boolean",
+            "title": "Use Fallback",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id"
+        ],
+        "title": "SummarizeRequest",
+        "description": "Request body for ``POST /ai/summarize``."
+      },
+      "SummarizeResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/SummaryResult"
+          },
+          "analysis_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Record Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "title": "SummarizeResponse",
+        "description": "Investigative summary payload."
+      },
+      "SummaryResult": {
+        "properties": {
+          "full_text": {
+            "type": "string",
+            "title": "Full Text"
+          },
+          "executive_summary": {
+            "type": "string",
+            "title": "Executive Summary"
+          },
+          "key_findings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Key Findings"
+          },
+          "timeline_narrative": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Narrative"
+          },
+          "iocs_identified": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Iocs Identified"
+          },
+          "recommended_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Actions"
+          },
+          "model_used": {
+            "type": "string",
+            "title": "Model Used"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "generation_params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Generation Params"
+          },
+          "confidence_score": {
+            "type": "number",
+            "title": "Confidence Score",
+            "default": 0.0
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "full_text",
+          "executive_summary",
+          "model_used",
+          "prompt_version"
+        ],
+        "title": "SummaryResult",
+        "description": "Structured investigative summary produced by the LLM summarizer."
+      },
+      "SuspicionLevel": {
+        "type": "string",
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low",
+          "informational"
+        ],
+        "title": "SuspicionLevel",
+        "description": "Suspicion classification assigned during AI triage."
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "expires_in"
+        ],
+        "title": "TokenResponse",
+        "description": "Bearer token pair returned after successful authentication."
+      },
+      "UptimeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "running"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "uptime_seconds",
+          "started_at"
+        ],
+        "title": "UptimeResponse",
+        "description": "Public uptime and version information."
+      },
+      "UsabilityDeleteResponse": {
+        "properties": {
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_count"
+        ],
+        "title": "UsabilityDeleteResponse",
+        "description": "Ethics data-destruction acknowledgement."
+      },
+      "UsabilityRespondRequest": {
+        "properties": {
+          "ratings": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Ratings"
+          },
+          "free_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Text"
+          }
+        },
+        "type": "object",
+        "title": "UsabilityRespondRequest",
+        "description": "Anonymous usability questionnaire submission body."
+      },
+      "UsabilitySubmitResponse": {
+        "properties": {
+          "participant_id": {
+            "type": "string",
+            "title": "Participant Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Response collected anonymously."
+          }
+        },
+        "type": "object",
+        "required": [
+          "participant_id"
+        ],
+        "title": "UsabilitySubmitResponse",
+        "description": "Acknowledgement of an anonymised usability submission."
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_login": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "full_name",
+          "role_name",
+          "is_active",
+          "created_at"
+        ],
+        "title": "UserResponse",
+        "description": "Public user profile response."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/auth/login"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Registration, login, and token lifecycle"
+    },
+    {
+      "name": "Users",
+      "description": "User profile and administration"
+    },
+    {
+      "name": "Health",
+      "description": "Liveness, readiness, and system diagnostics"
+    },
+    {
+      "name": "Cases",
+      "description": "Investigation case lifecycle management"
+    },
+    {
+      "name": "Evidence",
+      "description": "Forensic evidence registration and metadata"
+    },
+    {
+      "name": "Evidence Management",
+      "description": "Validation, custody, inventory, and integrity workflows"
+    },
+    {
+      "name": "Analysis",
+      "description": "Automated analysis pipeline control"
+    },
+    {
+      "name": "AI Analysis",
+      "description": "Local LLaMA-3 classification, summarisation, explanation, and Q&A"
+    },
+    {
+      "name": "Pipeline",
+      "description": "Job submission, progress monitoring, and parser inventory"
+    },
+    {
+      "name": "Reports",
+      "description": "Dual-output forensic report retrieval"
+    },
+    {
+      "name": "Evaluation",
+      "description": "DFRWS/CFReDS benchmark evaluation endpoints"
+    },
+    {
+      "name": "Monitoring",
+      "description": "Production monitoring, metrics, and log access"
+    }
+  ]
+}

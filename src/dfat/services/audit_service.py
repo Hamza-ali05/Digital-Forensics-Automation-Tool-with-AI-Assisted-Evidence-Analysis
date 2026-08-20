@@ -61,6 +61,10 @@ class AuditService:
             details={**payload, "user_id": user_id},
         )
 
+    async def flush(self) -> None:
+        """Flush buffered forensic audit log writes to disk."""
+        self._file_logger.flush()
+
     async def get_audit_trail(self, evidence_id: str) -> list[AuditEntry]:
         """Return database audit entries for an evidence ID."""
         return await self._audit_repo.get_by_evidence(evidence_id)

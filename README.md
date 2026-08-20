@@ -36,6 +36,36 @@ Pipeline:  Acquisition → Parsing → AI Triage → Reporting → Evaluation
 Full diagrams, layering, and the 24-ADR index:
 [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
 
+## Quick Start — One-Click Launch
+
+### Windows
+
+1. Install [Python 3.11+](https://www.python.org/downloads/) (check "Add to PATH")
+2. Install [Node.js 18+](https://nodejs.org/)
+3. Double-click `start.bat`
+4. Login at http://localhost:3000 with `admin` / `Admin!Pass#2026`
+
+### macOS / Linux
+
+1. Install Python 3.11+ and Node.js 18+
+2. Run: `chmod +x start.sh && ./start.sh`
+3. Login at http://localhost:3000 with `admin` / `Admin!Pass#2026`
+
+### Stopping
+
+- **Windows:** double-click `stop.bat` or close the console windows
+- **macOS/Linux:** press Ctrl+C in the terminal, or run `./stop.sh`
+
+### Optional: AI Features
+
+Install [Ollama](https://ollama.com) and run:
+
+```bash
+ollama pull llama3
+```
+
+The system detects Ollama automatically on next start.
+
 ## Features
 
 - **Case lifecycle** — create → open → active → review → close → archive, with

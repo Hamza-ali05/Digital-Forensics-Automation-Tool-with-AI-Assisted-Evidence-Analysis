@@ -25,6 +25,7 @@ from dfat.ai_engine.llm.prompts import ForensicPromptTemplates
 from dfat.ai_engine.monitoring.ai_monitor import AIMonitor
 from dfat.ai_engine.preprocessing.batcher import ArtefactBatcher
 from dfat.ai_engine.preprocessing.serializer import ArtefactSerializer
+from dfat.ai_engine.preprocessing.truncator import TokenTruncator
 from dfat.ai_engine.ranking.parser import RankingResponseParser
 from dfat.ai_engine.ranking.prompts import RankingPromptBuilder
 from dfat.ai_engine.ranking.ranker import LLMRelevanceRanker
@@ -72,6 +73,7 @@ from dfat.evaluation.usability.response_analyzer import ResponseAnalyzer
 from dfat.evaluation.usability.response_collector import ResponseCollector
 from dfat.infrastructure.cache.artefact_cache import InMemoryArtefactCache
 from dfat.infrastructure.logging.audit_logger import ForensicAuditLogger, setup_logging
+from dfat.monitoring.metrics_collector import MetricsCollector
 from dfat.infrastructure.repositories.artefact_repo import JSONArtefactRepository
 from dfat.infrastructure.repositories.evidence_repo import FileSystemEvidenceRepository
 from dfat.infrastructure.repositories.report_repo import FileSystemReportRepository
@@ -93,6 +95,11 @@ from dfat.pipeline.stages.evaluation_stage import EvaluationStage
 from dfat.pipeline.stages.parsing_stage import ParsingStage
 from dfat.pipeline.stages.reporting_stage import ReportingStage
 from dfat.pipeline.stages.triage_stage import TriageStage
+from dfat.runtime.recovery_manager import RecoveryManager
+from dfat.runtime.resource_tracker import ResourceTracker
+from dfat.runtime.service_monitor import ServiceMonitor
+from dfat.runtime.shutdown_handler import ShutdownHandler
+from dfat.runtime.task_manager import BackgroundTaskManager
 from dfat.forensic_engine.processing.categoriser import ArtefactCategoriser
 from dfat.forensic_engine.processing.correlator import ArtefactCorrelator
 from dfat.forensic_engine.processing.deduplicator import ArtefactDeduplicator
@@ -118,6 +125,20 @@ from dfat.reporting.schema.schema_versions import get_schema_path as _canonical_
 from dfat.auth.jwt_handler import JWTHandler
 from dfat.auth.password import PasswordHasher
 from dfat.auth.rbac import PermissionChecker
+from dfat.bootstrap.ai_initializer import AIInitializer
+from dfat.bootstrap.audit_initializer import AuditInitializer
+from dfat.bootstrap.auth_initializer import AuthInitializer
+from dfat.bootstrap.boot_sequencer import BootSequencer
+from dfat.bootstrap.config_validator import ConfigurationValidator
+from dfat.bootstrap.database_initializer import DatabaseInitializer
+from dfat.bootstrap.dataset_initializer import DatasetInitializer
+from dfat.bootstrap.directory_manager import DirectoryManager
+from dfat.bootstrap.evaluation_initializer import EvaluationInitializer
+from dfat.bootstrap.knowledge_initializer import KnowledgeInitializer
+from dfat.bootstrap.parser_initializer import ParserInitializer
+from dfat.bootstrap.reporting_initializer import ReportingInitializer
+from dfat.bootstrap.threat_intel_initializer import ThreatIntelInitializer
+from dfat.bootstrap.worker_initializer import WorkerInitializer
 from dfat.database.engine import DatabaseEngine
 from dfat.database.repositories.ai_analysis_repo import SQLAlchemyAIAnalysisRepository
 from dfat.database.repositories.artefact_repo import SQLAlchemyArtefactRepository
@@ -133,6 +154,7 @@ from dfat.database.repositories.evidence_status_repo import (
     EvidenceMetadataRepository,
     EvidenceStatusRepository,
 )
+from dfat.database.repositories.dataset_repo import DatasetRepository
 from dfat.database.repositories.pipeline_repo import SQLAlchemyPipelineRepository
 from dfat.database.repositories.report_repo import SQLAlchemyReportRepository
 from dfat.database.repositories.session_repo import SessionRepository
@@ -145,13 +167,46 @@ from dfat.services.evidence_management_service import EvidenceManagementService
 from dfat.services.evidence_service import EvidenceService
 from dfat.services.report_service import ReportService
 from dfat.services.user_service import UserService
+from dfat.dataset_intelligence.config import DatasetIntelligenceSettings
+from dfat.dataset_intelligence.classifier import DatasetClassifier
+from dfat.dataset_intelligence.preprocessor import DatasetPreprocessor
+from dfat.dataset_intelligence.registry import DatasetRegistry
+from dfat.dataset_intelligence.scanner import DatasetScanner
+from dfat.dataset_intelligence.validator import DatasetValidator
+from dfat.dataset_intelligence.watcher import DatasetWatcher
+from dfat.knowledge.embeddings import LocalEmbeddingEngine
+from dfat.knowledge.indexer import DocumentIndexer
+from dfat.knowledge.ioc_database import IOCKnowledgeBase
+from dfat.knowledge.knowledge_graph import ForensicKnowledgeGraph
+from dfat.knowledge.rag.context_builder import RAGContextBuilder
+from dfat.knowledge.rag.indexing_hooks import PipelineKnowledgeHooks
+from dfat.knowledge.rag.rag_analyzer import RAGEnhancedAnalyzer
+from dfat.knowledge.rag.rag_prompts import RAGPromptTemplates
+from dfat.knowledge.retriever import UnifiedRetriever
+from dfat.knowledge.vector_store import ForensicVectorStore
+from dfat.ml.config import MLSettings
+from dfat.ml.dataset_builder import MLDatasetBuilder
+from dfat.ml.experiment_tracker import ExperimentTracker
+from dfat.ml.feature_engineering import ForensicFeatureExtractor
+from dfat.ml.model_registry import ModelRegistry
+from dfat.ml.predictor import MLPredictor
+from dfat.ml.retrainer import AutoRetrainer
+from dfat.ml.trainer import ModelTrainer
+from dfat.threat_intel.feed_manager import ThreatFeedManager
+from dfat.threat_intel.mitre_mapper import MITREMapper
+from dfat.threat_intel.sigma_engine import SigmaEngine
+from dfat.threat_intel.stix_handler import STIXHandler
+from dfat.threat_intel.yara_engine import YARAEngine
 from dfat.settings import (
     AIEngineSettings,
     AuthSettings,
+    DatabaseSettings,
+    DatasetIntelligenceSettings as SettingsDatasetIntelligenceSettings,
     DFATSettings,
     EvidenceSettings,
     LoggingSettings,
     PipelineSettings,
+    ReportingSettings,
     load_settings,
 )
 
@@ -184,6 +239,16 @@ def _logging_settings(settings: DFATSettings) -> LoggingSettings:
 def _database_url(settings: DFATSettings) -> str:
     """Extract database URL from settings."""
     return settings.database.url
+
+
+def _database_settings(settings: DFATSettings) -> DatabaseSettings:
+    """Extract database settings subsection."""
+    return settings.database
+
+
+def _reporting_settings(settings: DFATSettings) -> ReportingSettings:
+    """Extract reporting settings subsection."""
+    return settings.reporting
 
 
 def _database_echo(settings: DFATSettings) -> bool:
@@ -246,6 +311,18 @@ def _evidence_settings(settings: DFATSettings) -> EvidenceSettings:
     return settings.evidence
 
 
+def _dataset_intelligence_settings(
+    settings: DFATSettings,
+) -> SettingsDatasetIntelligenceSettings:
+    """Extract nested dataset intelligence settings."""
+    return settings.dataset_intelligence
+
+
+def _ml_settings(settings: DFATSettings) -> MLSettings:
+    """Extract nested ML lifecycle settings."""
+    return settings.ml
+
+
 class LoggingContainer(containers.DeclarativeContainer):
     """Logging and forensic audit trail providers."""
 
@@ -302,6 +379,10 @@ class RepositoryContainer(containers.DeclarativeContainer):
     # Primary SQLAlchemy-backed repositories (async).
     evidence_repo = providers.Singleton(
         SQLAlchemyEvidenceRepository,
+        session_factory=session_factory,
+    )
+    dataset_repo = providers.Singleton(
+        DatasetRepository,
         session_factory=session_factory,
     )
     artefact_repo = providers.Singleton(
@@ -408,6 +489,227 @@ class CacheContainer(containers.DeclarativeContainer):
     """In-memory artefact cache providers."""
 
     artefact_cache = providers.Singleton(InMemoryArtefactCache, max_size=100)
+
+
+class KnowledgeContainer(containers.DeclarativeContainer):
+    """Local embedding and vector-store providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    audit_service = providers.Dependency(instance_of=AuditService)
+    dataset_repo = providers.Dependency(instance_of=DatasetRepository)
+
+    dataset_intelligence_settings = providers.Callable(
+        _dataset_intelligence_settings,
+        settings,
+    )
+    vector_store_path = providers.Callable(
+        lambda value: value.vector_store_path,
+        dataset_intelligence_settings,
+    )
+    knowledge_graph_path = providers.Callable(
+        lambda value: value.knowledge_graph_path,
+        dataset_intelligence_settings,
+    )
+    ioc_database_path = providers.Callable(
+        lambda value: value.ioc_database_path,
+        dataset_intelligence_settings,
+    )
+    embedding_engine = providers.Singleton(LocalEmbeddingEngine)
+    vector_store = providers.Singleton(
+        ForensicVectorStore,
+        persist_path=vector_store_path,
+        embedding_engine=embedding_engine,
+    )
+    ioc_knowledge_base = providers.Singleton(
+        IOCKnowledgeBase,
+        db_path=ioc_database_path,
+    )
+    knowledge_graph = providers.Singleton(
+        ForensicKnowledgeGraph,
+        persist_path=knowledge_graph_path,
+    )
+    document_indexer = providers.Factory(
+        DocumentIndexer,
+        embedding_engine=embedding_engine,
+        vector_store=vector_store,
+        audit_service=audit_service,
+        dataset_repo=dataset_repo,
+    )
+    unified_retriever = providers.Factory(
+        UnifiedRetriever,
+        vector_store=vector_store,
+        ioc_db=ioc_knowledge_base,
+        knowledge_graph=knowledge_graph,
+        embedding_engine=embedding_engine,
+    )
+    token_truncator = providers.Singleton(TokenTruncator, max_tokens=6000)
+    rag_prompts = providers.Singleton(RAGPromptTemplates)
+    rag_context_builder = providers.Factory(
+        RAGContextBuilder,
+        retriever=unified_retriever,
+        truncator=token_truncator,
+    )
+    pipeline_knowledge_hooks = providers.Factory(
+        PipelineKnowledgeHooks,
+        indexer=document_indexer,
+        knowledge_graph=knowledge_graph,
+        ioc_db=ioc_knowledge_base,
+        audit_service=audit_service,
+    )
+
+
+class DatasetIntelligenceContainer(containers.DeclarativeContainer):
+    """Dataset intelligence settings and path providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    audit_service = providers.Dependency(instance_of=AuditService)
+    mime_identifier = providers.Dependency(instance_of=MIMEIdentifier)
+    dataset_repo = providers.Dependency(instance_of=DatasetRepository)
+
+    dataset_intelligence_settings = providers.Callable(
+        _dataset_intelligence_settings,
+        settings,
+    )
+    datasets_dir = providers.Callable(
+        lambda value: value.datasets_dir,
+        dataset_intelligence_settings,
+    )
+    vector_store_path = providers.Callable(
+        lambda value: value.vector_store_path,
+        dataset_intelligence_settings,
+    )
+    knowledge_graph_path = providers.Callable(
+        lambda value: value.knowledge_graph_path,
+        dataset_intelligence_settings,
+    )
+    ioc_database_path = providers.Callable(
+        lambda value: value.ioc_database_path,
+        dataset_intelligence_settings,
+    )
+    ml_models_path = providers.Callable(
+        lambda value: value.ml_models_path,
+        dataset_intelligence_settings,
+    )
+    experiments_path = providers.Callable(
+        lambda value: value.experiments_path,
+        dataset_intelligence_settings,
+    )
+    dataset_scanner = providers.Factory(
+        DatasetScanner,
+        settings=dataset_intelligence_settings,
+        audit_service=audit_service,
+        mime_identifier=mime_identifier,
+    )
+    dataset_classifier = providers.Factory(DatasetClassifier)
+    dataset_validator = providers.Factory(DatasetValidator)
+    dataset_preprocessor = providers.Factory(DatasetPreprocessor)
+    dataset_registry = providers.Factory(
+        DatasetRegistry,
+        dataset_repo=dataset_repo,
+        scanner=dataset_scanner,
+        classifier=dataset_classifier,
+        validator=dataset_validator,
+        preprocessor=dataset_preprocessor,
+        audit_service=audit_service,
+    )
+    dataset_watcher = providers.Singleton(
+        DatasetWatcher,
+        settings=dataset_intelligence_settings,
+        registry=dataset_registry,
+        audit_service=audit_service,
+    )
+
+
+class MLContainer(containers.DeclarativeContainer):
+    """ML lifecycle settings and experiment-tracking providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    dataset_registry = providers.Dependency()
+    audit_service = providers.Dependency(instance_of=AuditService)
+
+    ml_settings = providers.Callable(_ml_settings, settings)
+    models_dir = providers.Callable(
+        lambda value: value.models_dir,
+        ml_settings,
+    )
+    experiments_dir = providers.Callable(
+        lambda value: value.experiments_dir,
+        ml_settings,
+    )
+    experiment_tracker = providers.Singleton(
+        ExperimentTracker,
+        experiments_dir=experiments_dir,
+    )
+    feature_extractor = providers.Singleton(ForensicFeatureExtractor)
+    dataset_builder = providers.Factory(
+        MLDatasetBuilder,
+        feature_extractor=feature_extractor,
+        dataset_registry=dataset_registry,
+        settings=ml_settings,
+    )
+    model_registry = providers.Singleton(
+        ModelRegistry,
+        models_dir=models_dir,
+    )
+    model_trainer = providers.Factory(
+        ModelTrainer,
+        experiment_tracker=experiment_tracker,
+        ml_settings=ml_settings,
+    )
+    ml_predictor = providers.Singleton(
+        MLPredictor,
+        model_registry=model_registry,
+        feature_extractor=feature_extractor,
+    )
+    auto_retrainer = providers.Factory(
+        AutoRetrainer,
+        dataset_registry=dataset_registry,
+        dataset_builder=dataset_builder,
+        trainer=model_trainer,
+        model_registry=model_registry,
+        ml_settings=ml_settings,
+        audit_service=audit_service,
+    )
+
+
+def _yara_rules_dir(settings: DFATSettings) -> Path:
+    return Path(settings.evidence.evidence_dir).parent / "yara_rules"
+
+
+def _sigma_rules_dir(settings: DFATSettings) -> Path:
+    return Path(settings.evidence.evidence_dir).parent / "sigma_rules"
+
+
+class ThreatIntelContainer(containers.DeclarativeContainer):
+    """YARA, Sigma, MITRE, STIX, and feed-management providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    dataset_registry = providers.Dependency()
+    ioc_knowledge_base = providers.Dependency()
+    knowledge_graph = providers.Dependency()
+    audit_service = providers.Dependency(instance_of=AuditService)
+
+    yara_engine = providers.Singleton(
+        YARAEngine,
+        rules_dir=providers.Callable(_yara_rules_dir, settings),
+    )
+    sigma_engine = providers.Singleton(
+        SigmaEngine,
+        rules_dir=providers.Callable(_sigma_rules_dir, settings),
+    )
+    mitre_mapper = providers.Singleton(MITREMapper)
+    stix_handler = providers.Singleton(STIXHandler)
+    feed_manager = providers.Factory(
+        ThreatFeedManager,
+        dataset_registry=dataset_registry,
+        ioc_kb=ioc_knowledge_base,
+        yara_engine=yara_engine,
+        sigma_engine=sigma_engine,
+        mitre_mapper=mitre_mapper,
+        stix_handler=stix_handler,
+        knowledge_graph=knowledge_graph,
+        audit_service=audit_service,
+    )
 
 
 class ForensicEngineContainer(containers.DeclarativeContainer):
@@ -554,6 +856,11 @@ def _enable_fallback(settings: DFATSettings) -> bool:
     return settings.ai_engine.enable_fallback
 
 
+def _use_rag(settings: DFATSettings) -> bool:
+    """Extract RAG analyser toggle from settings."""
+    return settings.ai_engine.use_rag
+
+
 class _NullAuditService:
     """No-op audit port used when wiring AIMonitor before ServicesContainer."""
 
@@ -566,6 +873,8 @@ class AIEngineContainer(containers.DeclarativeContainer):
 
     settings = providers.Dependency(instance_of=DFATSettings)
     audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+    rag_context_builder = providers.Dependency()
+    audit_service = providers.Dependency()
 
     llm_config = providers.Singleton(_llm_config, settings)
     ai_response_cache = providers.Singleton(_ai_response_cache, settings)
@@ -657,6 +966,17 @@ class AIEngineContainer(containers.DeclarativeContainer):
         cache=ai_response_cache,
         monitor=ai_monitor,
         audit_logger=audit_logger,
+    )
+    rag_prompts = providers.Singleton(
+        RAGPromptTemplates,
+        base_templates=prompts,
+    )
+    rag_analyzer = providers.Singleton(
+        RAGEnhancedAnalyzer,
+        llm_client=llm_client,
+        context_builder=rag_context_builder,
+        rag_prompts=rag_prompts,
+        audit_service=audit_service,
     )
     fallback = providers.Singleton(
         RuleBasedAnalyzer,
@@ -903,6 +1223,8 @@ class PipelineContainer(containers.DeclarativeContainer):
     custody_service = providers.Dependency(instance_of=ChainOfCustodyService)
     case_repo = providers.Dependency(instance_of=SQLAlchemyCaseRepository)
     pipeline_repo = providers.Dependency(instance_of=SQLAlchemyPipelineRepository)
+    post_complete_hooks = providers.List()
+    ml_predictor = providers.Dependency(default=None)
 
     pipeline_settings = providers.Callable(_pipeline_settings, settings)
     pipeline_audit_service = providers.Factory(
@@ -969,7 +1291,10 @@ class PipelineContainer(containers.DeclarativeContainer):
     relationship_mapper = providers.Singleton(RelationshipMapper)
     timeline_generator = providers.Singleton(TimelineGenerator)
     ioc_detector = providers.Singleton(IOCDetector)
-    scoring_engine = providers.Singleton(ScoringEngine)
+    scoring_engine = providers.Singleton(
+        ScoringEngine,
+        ml_predictor=ml_predictor,
+    )
     rule_based_triage_engine = providers.Singleton(
         RuleBasedTriageEngine,
         scoring_engine=scoring_engine,
@@ -1044,6 +1369,7 @@ class PipelineContainer(containers.DeclarativeContainer):
         benchmark_comparator=benchmark_comparator,
         pipeline_repo=pipeline_repo,
         parser_registry=parser_registry,
+        post_complete_hooks=post_complete_hooks,
     )
 
 
@@ -1238,11 +1564,185 @@ class ServicesContainer(containers.DeclarativeContainer):
     )
 
 
+class BootstrapContainer(containers.DeclarativeContainer):
+    """Bootstrap initializers and startup orchestration providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    database_engine = providers.Dependency(instance_of=DatabaseEngine)
+    user_repo = providers.Dependency()
+    audit_service = providers.Dependency()
+    session_repo = providers.Dependency()
+    parser_registry = providers.Dependency()
+    dataset_registry = providers.Dependency()
+    vector_store = providers.Dependency()
+    embedding_engine = providers.Dependency()
+    document_indexer = providers.Dependency()
+    ioc_knowledge_base = providers.Dependency()
+    knowledge_graph = providers.Dependency()
+    llm_connection = providers.Dependency()
+    rag_analyzer = providers.Dependency()
+    rule_based_analyzer = providers.Dependency()
+    ml_predictor = providers.Dependency()
+    model_registry = providers.Dependency()
+    auto_retrainer = providers.Dependency()
+    feed_manager = providers.Dependency()
+    yara_engine = providers.Dependency()
+    sigma_engine = providers.Dependency()
+    mitre_mapper = providers.Dependency()
+    ground_truth_loader = providers.Dependency()
+    password_hasher = providers.Dependency(instance_of=PasswordHasher)
+    jwt_handler = providers.Dependency(instance_of=JWTHandler)
+    ai_response_cache = providers.Dependency()
+
+    config_validator = providers.Singleton(ConfigurationValidator)
+    directory_manager = providers.Singleton(DirectoryManager)
+    db_initializer = providers.Factory(
+        DatabaseInitializer,
+        db_engine=database_engine,
+        settings=providers.Callable(_database_settings, settings),
+    )
+    auth_initializer = providers.Factory(
+        AuthInitializer,
+        user_repo=user_repo,
+        password_hasher=password_hasher,
+        jwt_handler=jwt_handler,
+        settings=settings,
+    )
+    audit_initializer = providers.Factory(
+        AuditInitializer,
+        audit_service=audit_service,
+        settings=settings,
+    )
+    parser_initializer = providers.Factory(
+        ParserInitializer,
+        parser_registry=parser_registry,
+    )
+    dataset_initializer = providers.Factory(
+        DatasetInitializer,
+        dataset_registry=dataset_registry,
+        settings=settings,
+    )
+    knowledge_initializer = providers.Factory(
+        KnowledgeInitializer,
+        vector_store=vector_store,
+        embedding_engine=embedding_engine,
+        indexer=document_indexer,
+        ioc_kb=ioc_knowledge_base,
+        knowledge_graph=knowledge_graph,
+        settings=settings,
+    )
+    ai_initializer = providers.Factory(
+        AIInitializer,
+        llm_connection=llm_connection,
+        rag_analyzer=rag_analyzer,
+        rule_based_analyzer=rule_based_analyzer,
+        ml_predictor=ml_predictor,
+        model_registry=model_registry,
+        auto_retrainer=auto_retrainer,
+        settings=settings,
+    )
+    threat_intel_initializer = providers.Factory(
+        ThreatIntelInitializer,
+        feed_manager=feed_manager,
+        yara_engine=yara_engine,
+        sigma_engine=sigma_engine,
+        mitre_mapper=mitre_mapper,
+        settings=settings,
+    )
+    reporting_initializer = providers.Factory(
+        ReportingInitializer,
+        settings=providers.Callable(_reporting_settings, settings),
+    )
+    evaluation_initializer = providers.Factory(
+        EvaluationInitializer,
+        ground_truth_loader=ground_truth_loader,
+        settings=settings,
+    )
+    task_manager = providers.Singleton(BackgroundTaskManager)
+    worker_initializer = providers.Singleton(
+        WorkerInitializer,
+        settings=settings,
+        task_manager=task_manager,
+        dataset_registry=dataset_registry,
+        auto_retrainer=auto_retrainer,
+        llm_connection=llm_connection,
+        db_engine=database_engine,
+        session_repo=session_repo,
+        ai_response_cache=ai_response_cache,
+    )
+    boot_sequencer = providers.Factory(
+        BootSequencer,
+        settings=settings,
+        config_validator=config_validator,
+        directory_manager=directory_manager,
+        db_initializer=db_initializer,
+        auth_initializer=auth_initializer,
+        audit_initializer=audit_initializer,
+        parser_initializer=parser_initializer,
+        dataset_initializer=dataset_initializer,
+        knowledge_initializer=knowledge_initializer,
+        ai_initializer=ai_initializer,
+        threat_intel_initializer=threat_intel_initializer,
+        reporting_initializer=reporting_initializer,
+        evaluation_initializer=evaluation_initializer,
+        worker_initializer=worker_initializer,
+    )
+
+
+class RuntimeContainer(containers.DeclarativeContainer):
+    """Runtime health monitoring and resource tracking providers."""
+
+    settings = providers.Dependency(instance_of=DFATSettings)
+    database_engine = providers.Dependency(instance_of=DatabaseEngine)
+    llm_connection = providers.Dependency()
+    vector_store = providers.Dependency()
+    audit_logger = providers.Dependency(instance_of=ForensicAuditLogger)
+    audit_service = providers.Dependency(instance_of=AuditService)
+    job_manager = providers.Dependency(instance_of=JobManager)
+    task_manager = providers.Dependency(instance_of=BackgroundTaskManager)
+    boot_sequencer = providers.Dependency()
+
+    service_monitor = providers.Singleton(
+        ServiceMonitor,
+        db_engine=database_engine,
+        llm_connection=llm_connection,
+        vector_store=vector_store,
+        settings=settings,
+        audit_logger=audit_logger,
+        check_interval_seconds=30,
+    )
+    resource_tracker = providers.Singleton(
+        ResourceTracker,
+        settings=settings,
+        database_engine=database_engine,
+        vector_store=vector_store,
+        job_manager=job_manager,
+        task_manager=task_manager,
+        data_dir=providers.Object(Path("data")),
+    )
+    recovery_manager = providers.Singleton(
+        RecoveryManager,
+        service_monitor=service_monitor,
+        boot_sequencer=boot_sequencer,
+        audit_service=audit_service,
+    )
+    shutdown_handler = providers.Factory(
+        ShutdownHandler,
+        task_manager=task_manager,
+        db_engine=database_engine,
+        audit_service=audit_service,
+        job_manager=job_manager,
+        task_stop_timeout_seconds=10.0,
+        pipeline_wait_timeout_seconds=60.0,
+    )
+
+
 class ApplicationContainer(containers.DeclarativeContainer):
     """Root application DI container with nested engine sub-containers."""
 
     config = providers.Configuration()
     settings = providers.Singleton(load_settings)
+    metrics_collector = providers.Singleton(MetricsCollector)
 
     logging = providers.Container(LoggingContainer, settings=settings)
     storage = providers.Container(StorageContainer, settings=settings)
@@ -1341,6 +1841,80 @@ class ApplicationContainer(containers.DeclarativeContainer):
         performance_analyzer=evaluation_engine.performance_analyzer,
         questionnaire_model=evaluation_engine.questionnaire_model,
     )
+    knowledge = providers.Container(
+        KnowledgeContainer,
+        settings=settings,
+        audit_service=services.audit_service,
+        dataset_repo=repositories.dataset_repo,
+    )
+    dataset_intelligence = providers.Container(
+        DatasetIntelligenceContainer,
+        settings=settings,
+        audit_service=services.audit_service,
+        mime_identifier=services.mime_identifier,
+        dataset_repo=repositories.dataset_repo,
+    )
+    ml = providers.Container(
+        MLContainer,
+        settings=settings,
+        dataset_registry=dataset_intelligence.dataset_registry,
+        audit_service=services.audit_service,
+    )
+    threat_intel = providers.Container(
+        ThreatIntelContainer,
+        settings=settings,
+        dataset_registry=dataset_intelligence.dataset_registry,
+        ioc_knowledge_base=knowledge.ioc_knowledge_base,
+        knowledge_graph=knowledge.knowledge_graph,
+        audit_service=services.audit_service,
+    )
+    bootstrap = providers.Container(
+        BootstrapContainer,
+        settings=settings,
+        database_engine=database.database_engine,
+        user_repo=repositories.user_repo,
+        audit_service=services.audit_service,
+        session_repo=repositories.session_repo,
+        parser_registry=pipeline.parser_registry,
+        dataset_registry=dataset_intelligence.dataset_registry,
+        vector_store=knowledge.vector_store,
+        embedding_engine=knowledge.embedding_engine,
+        document_indexer=knowledge.document_indexer,
+        ioc_knowledge_base=knowledge.ioc_knowledge_base,
+        knowledge_graph=knowledge.knowledge_graph,
+        llm_connection=ai_engine.connection_manager,
+        rag_analyzer=ai_engine.rag_analyzer,
+        rule_based_analyzer=ai_engine.fallback,
+        ml_predictor=ml.ml_predictor,
+        model_registry=ml.model_registry,
+        auto_retrainer=ml.auto_retrainer,
+        feed_manager=threat_intel.feed_manager,
+        yara_engine=threat_intel.yara_engine,
+        sigma_engine=threat_intel.sigma_engine,
+        mitre_mapper=threat_intel.mitre_mapper,
+        ground_truth_loader=evaluation_engine.ground_truth_loader,
+        password_hasher=auth.password_hasher,
+        jwt_handler=auth.jwt_handler,
+        ai_response_cache=ai_engine.ai_response_cache,
+    )
+    boot_sequencer = bootstrap.boot_sequencer
+    task_manager = bootstrap.task_manager
+    runtime = providers.Container(
+        RuntimeContainer,
+        settings=settings,
+        database_engine=database.database_engine,
+        llm_connection=ai_engine.connection_manager,
+        vector_store=knowledge.vector_store,
+        audit_logger=logging.forensic_audit_logger,
+        audit_service=services.audit_service,
+        job_manager=pipeline.job_manager,
+        task_manager=task_manager,
+        boot_sequencer=boot_sequencer,
+    )
+    service_monitor = runtime.service_monitor
+    resource_tracker = runtime.resource_tracker
+    recovery_manager = runtime.recovery_manager
+    shutdown_handler = runtime.shutdown_handler
 
 
 def build_application_container() -> ApplicationContainer:
@@ -1349,6 +1923,10 @@ def build_application_container() -> ApplicationContainer:
     ``AcquisitionStage`` needs evidence-management / custody services that live
     in ``ServicesContainer``, while services need ``pipeline_orchestrator``.
     Overrides break that cycle after both nested containers exist.
+
+    ``RAGEnhancedAnalyzer`` depends on knowledge-layer context building and
+    services-layer audit. Those are wired here so ``LocalLLMClient`` remains
+    independently available on ``ai_engine.llm_client``.
     """
     container = ApplicationContainer()
     container.pipeline.evidence_management_service.override(
@@ -1357,4 +1935,14 @@ def build_application_container() -> ApplicationContainer:
     container.pipeline.custody_service.override(
         container.services.chain_of_custody_service
     )
+    container.ai_engine.rag_context_builder.override(
+        container.knowledge.rag_context_builder
+    )
+    container.ai_engine.audit_service.override(container.services.audit_service)
+    container.pipeline.post_complete_hooks.override(
+        providers.List(container.knowledge.pipeline_knowledge_hooks)
+    )
+    container.pipeline.ml_predictor.override(container.ml.ml_predictor)
+    if _use_rag(container.settings()):
+        container.pipeline.llm_analyzer.override(container.ai_engine.rag_analyzer)
     return container

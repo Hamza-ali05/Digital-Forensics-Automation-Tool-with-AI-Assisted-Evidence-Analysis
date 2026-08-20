@@ -13,11 +13,13 @@ build/
 venv/
 env/
 
-# Environment / secrets (keep .env.example tracked)
+# Environment / secrets (keep example templates tracked)
 .env
 .env.local
 .env.*.local
+.env.production
 !.env.example
+!.env.production.example
 *.pem
 *.key
 credentials.json
@@ -79,18 +81,30 @@ desktop.ini
 *.bak
 tmp/
 temp/
+logs/
 
-# Runtime / forensic data
+# Launcher / local runtime state
+.dfat/
+.dfat_backend.pid
+.dfat_frontend.pid
+
+# Runtime / forensic data (local only — keep .gitkeep placeholders)
 data/evidence/*
 data/datasets/*
 data/outputs/*
 data/questionnaire/responses/*
+data/knowledge/*
+data/ml/*
+data/e2e/*
 !data/evidence/.gitkeep
 !data/datasets/.gitkeep
 !data/outputs/.gitkeep
 !data/questionnaire/.gitkeep
 !data/questionnaire/responses/.gitkeep
 !data/ground_truth/.gitkeep
+!data/knowledge/.gitkeep
+!data/ml/.gitkeep
+!data/e2e/.gitkeep
 
 # Forensic image / dump patterns
 *.dd

@@ -37,9 +37,18 @@ export const Routes = {
   EvaluationBenchmarkHistory: { path: "/evaluation/benchmark/history" },
   EvaluationPerformance: { path: "/evaluation/performance" },
   EvaluationUsability: { path: "/evaluation/usability" },
+  Datasets: { path: "/datasets" },
+  DatasetDetail: { path: "/datasets/:id" },
+  MLModels: { path: "/ml" },
+  ModelDetail: { path: "/ml/models/:name" },
+  Knowledge: { path: "/knowledge" },
+  ThreatIntel: { path: "/threat-intel" },
   Settings: { path: "/settings" },
   SettingsUsers: { path: "/settings/users" },
   SettingsAudit: { path: "/settings/audit" },
+  AdminSystem: { path: "/admin/system" },
+  AdminTasks: { path: "/admin/tasks" },
+  AdminCapabilities: { path: "/admin/capabilities" },
   Help: { path: "/help" },
   Profile: { path: "/profile" },
   Questionnaire: { path: "/questionnaire" },
@@ -90,6 +99,21 @@ const UsabilityResults = lazy(() =>
 const Settings = lazy(() => import("pages/admin/Settings"));
 const UserManagement = lazy(() => import("pages/admin/UserManagement"));
 const AuditLogs = lazy(() => import("pages/admin/AuditLogs"));
+const SystemStatus = lazy(() => import("pages/admin/SystemStatus"));
+const TaskMonitor = lazy(() => import("pages/admin/TaskMonitor"));
+const CapabilityDashboard = lazy(() =>
+  import("pages/admin/CapabilityDashboard")
+);
+const DatasetDashboard = lazy(() => import("pages/datasets/DatasetDashboard"));
+const DatasetDetail = lazy(() => import("pages/datasets/DatasetDetail"));
+const MLDashboard = lazy(() => import("pages/ml/MLDashboard"));
+const ModelDetail = lazy(() => import("pages/ml/ModelDetail"));
+const KnowledgeDashboard = lazy(() =>
+  import("pages/knowledge/KnowledgeDashboard")
+);
+const ThreatIntelDashboard = lazy(() =>
+  import("pages/threat-intel/ThreatIntelDashboard")
+);
 const Help = lazy(() => import("pages/Help"));
 const Profile = lazy(() => import("pages/Profile"));
 
@@ -277,6 +301,56 @@ function ProtectedApp() {
 
             <Route
               exact
+              path={Routes.DatasetDetail.path}
+              component={DatasetDetail}
+            />
+            <Route
+              exact
+              path={Routes.Datasets.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin", "investigator", "analyst"]}>
+                  <DatasetDashboard />
+                </RoleGuard>
+              )}
+            />
+
+            <Route
+              exact
+              path={Routes.ModelDetail.path}
+              component={ModelDetail}
+            />
+            <Route
+              exact
+              path={Routes.MLModels.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin", "investigator", "analyst"]}>
+                  <MLDashboard />
+                </RoleGuard>
+              )}
+            />
+
+            <Route
+              exact
+              path={Routes.Knowledge.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin", "investigator", "analyst"]}>
+                  <KnowledgeDashboard />
+                </RoleGuard>
+              )}
+            />
+
+            <Route
+              exact
+              path={Routes.ThreatIntel.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin", "investigator", "analyst"]}>
+                  <ThreatIntelDashboard />
+                </RoleGuard>
+              )}
+            />
+
+            <Route
+              exact
               path={Routes.SettingsUsers.path}
               render={() => (
                 <RoleGuard allowedRoles={["admin"]}>
@@ -290,6 +364,33 @@ function ProtectedApp() {
               render={() => (
                 <RoleGuard allowedRoles={["admin"]}>
                   <AuditLogs />
+                </RoleGuard>
+              )}
+            />
+            <Route
+              exact
+              path={Routes.AdminSystem.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin"]}>
+                  <SystemStatus />
+                </RoleGuard>
+              )}
+            />
+            <Route
+              exact
+              path={Routes.AdminTasks.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin"]}>
+                  <TaskMonitor />
+                </RoleGuard>
+              )}
+            />
+            <Route
+              exact
+              path={Routes.AdminCapabilities.path}
+              render={() => (
+                <RoleGuard allowedRoles={["admin"]}>
+                  <CapabilityDashboard />
                 </RoleGuard>
               )}
             />
