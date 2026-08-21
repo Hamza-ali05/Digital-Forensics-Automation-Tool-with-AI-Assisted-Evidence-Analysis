@@ -103,11 +103,6 @@ export default function CaseCreate() {
       <PageHeader
         title="New Case"
         subtitle="Open a new investigation case"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Cases", to: Routes.Cases.path },
-          { label: "New Case" },
-        ]}
       />
 
       <Row className="justify-content-center">

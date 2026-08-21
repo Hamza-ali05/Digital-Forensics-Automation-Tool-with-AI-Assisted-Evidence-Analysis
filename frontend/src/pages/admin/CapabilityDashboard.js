@@ -66,10 +66,10 @@ function UnavailableHint({ featureKey }) {
   const hint = INSTALL_HINTS[featureKey];
   if (!hint) return null;
   return (
-    <div className="small text-muted mt-2">
+    <span className="d-block small text-muted mt-2">
       <FontAwesomeIcon icon={faWrench} className="me-1" aria-hidden="true" />
       {hint}
-    </div>
+    </span>
   );
 }
 
@@ -112,13 +112,24 @@ export default function CapabilityDashboard() {
   const knowledge = capabilities?.knowledge || {};
   const benchmarks = capabilities?.benchmarks || {};
 
-  const vectorDocs = knowledgeStats?.collections
-    ? Object.values(knowledgeStats.collections).reduce(
+  const vectorDocs = (() => {
+    const collections =
+      knowledgeStats?.vector_collections || knowledgeStats?.collections || null;
+    if (collections) {
+      return Object.values(collections).reduce(
         (sum, item) =>
           sum + Number(item?.count ?? item?.document_count ?? item?.documents ?? 0),
         0
-      )
-    : knowledgeStats?.document_count;
+      );
+    }
+    return knowledgeStats?.document_count;
+  })();
+
+  const graphNodeCount =
+    knowledgeStats?.graph_statistics?.node_count ??
+    knowledgeStats?.graph?.node_count;
+  const iocCount =
+    knowledgeStats?.ioc_statistics?.total_count ?? knowledgeStats?.ioc_count;
 
   return (
     <Container fluid className="px-4 py-4">
@@ -211,9 +222,7 @@ export default function CapabilityDashboard() {
               <ListGroup.Item className="px-0 d-flex justify-content-between">
                 <span>
                   Knowledge graph
-                  {knowledgeStats?.graph?.node_count != null
-                    ? ` (${knowledgeStats.graph.node_count} nodes)`
-                    : ""}
+                  {graphNodeCount != null ? ` (${graphNodeCount} nodes)` : ""}
                 </span>
                 <AvailabilityBadge available={knowledge.graph} />
               </ListGroup.Item>
@@ -221,9 +230,7 @@ export default function CapabilityDashboard() {
               <ListGroup.Item className="px-0 d-flex justify-content-between">
                 <span>
                   IOC database
-                  {knowledgeStats?.ioc_count != null
-                    ? ` (${knowledgeStats.ioc_count} IOCs)`
-                    : ""}
+                  {iocCount != null ? ` (${iocCount} IOCs)` : ""}
                 </span>
                 <AvailabilityBadge available={knowledge.ioc_db} />
               </ListGroup.Item>
@@ -251,11 +258,13 @@ export default function CapabilityDashboard() {
           </CapabilitySection>
 
           <CapabilitySection title="ML Readiness" icon={faBrain}>
-            <p className="text-muted small mb-0">
-              ML capability flag:{" "}
-              <AvailabilityBadge available={ai.ml} />
+            <div className="text-muted small mb-0">
+              <div className="d-flex justify-content-between align-items-center">
+                <span>ML capability flag</span>
+                <AvailabilityBadge available={ai.ml} />
+              </div>
               {!ai.ml ? <UnavailableHint featureKey="ml" /> : null}
-            </p>
+            </div>
           </CapabilitySection>
         </Row>
       )}

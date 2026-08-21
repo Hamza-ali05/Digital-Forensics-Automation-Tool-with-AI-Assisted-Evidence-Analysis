@@ -140,11 +140,6 @@ export default function EvidenceRegister() {
       <PageHeader
         title="Register Evidence"
         subtitle="Associate a pre-placed forensic image with an investigation case"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evidence", to: Routes.Evidence.path },
-          { label: "Register" },
-        ]}
       />
 
       <Row className="justify-content-center">

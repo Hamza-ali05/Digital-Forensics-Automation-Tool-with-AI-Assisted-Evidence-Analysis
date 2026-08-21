@@ -209,14 +209,13 @@ export default function ReportDetail() {
     setVerifyResult(null);
     setCompareResult(null);
     try {
-      const [metaResult, jsonResult, narrativeResult, jobs, reports] =
-        await Promise.all([
-          reportsService.getById(id),
-          reportsService.getJson(id),
-          reportsService.getNarrative(id).catch(() => ""),
-          pipelineService.listJobs().catch(() => []),
-          listCompletedReports().catch(() => []),
-        ]);
+      const metaResult = await reportsService.getById(id);
+      const [jsonResult, narrativeResult, jobs, reports] = await Promise.all([
+        reportsService.getJson(id),
+        reportsService.getNarrative(id).catch(() => ""),
+        pipelineService.listJobs().catch(() => []),
+        listCompletedReports().catch(() => []),
+      ]);
       setMeta(metaResult);
       setJsonDoc(jsonResult);
       setNarrative(narrativeText(narrativeResult));
@@ -426,11 +425,6 @@ export default function ReportDetail() {
       <Container fluid className="px-0">
         <PageHeader
           title="Report Detail"
-          breadcrumbs={[
-            { label: "Home", to: Routes.Dashboard.path },
-            { label: "Reports", to: Routes.Reports.path },
-            { label: "Detail" },
-          ]}
         />
         <SkeletonLoader type="detail" rows={8} />
       </Container>
@@ -442,11 +436,6 @@ export default function ReportDetail() {
       <Container fluid className="px-0">
         <PageHeader
           title="Report Detail"
-          breadcrumbs={[
-            { label: "Home", to: Routes.Dashboard.path },
-            { label: "Reports", to: Routes.Reports.path },
-            { label: "Detail" },
-          ]}
         />
         {error ? (
           <ApiErrorDisplay error={error} onRetry={loadReport} />
@@ -465,11 +454,6 @@ export default function ReportDetail() {
       <PageHeader
         title={`Report ${shortId(id)}`}
         subtitle={meta.case_name || "Forensic dual-output report"}
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Reports", to: Routes.Reports.path },
-          { label: shortId(id) },
-        ]}
         actions={exportButtons}
       />
 

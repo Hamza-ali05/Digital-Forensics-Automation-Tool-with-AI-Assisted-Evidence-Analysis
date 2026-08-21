@@ -378,10 +378,6 @@ export default function AIAnalysis() {
       <PageHeader
         title="AI-Assisted Evidence Analysis"
         subtitle="Local LLaMA-3 classification, summarisation, and investigator Q&A"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "AI Analysis" },
-        ]}
         actions={
           <div className="d-flex align-items-center">
             {healthLoading ? (

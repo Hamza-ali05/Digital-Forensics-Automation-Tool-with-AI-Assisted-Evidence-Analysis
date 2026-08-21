@@ -25,19 +25,18 @@ export function evidenceOptionLabel(item) {
   return name ? `${name} (${short})` : short;
 }
 
-function findLatestReportJob(jobs, evidenceId) {
+function findReportJobs(jobs, evidenceId) {
   const matches = (jobs || []).filter(
     (job) =>
       String(job.evidence_id) === String(evidenceId) &&
       job.report_id &&
       COMPLETED.has(String(job.status || "").toLowerCase())
   );
-  if (!matches.length) return null;
   return matches.sort((a, b) => {
     const aTime = new Date(a.completed_at || a.created_at || 0).getTime();
     const bTime = new Date(b.completed_at || b.created_at || 0).getTime();
     return bTime - aTime;
-  })[0];
+  });
 }
 
 /**
@@ -48,21 +47,28 @@ export async function loadArtefactsForEvidence(evidenceId) {
     return { artefacts: [], reportMeta: null };
   }
   const jobs = await pipelineService.listJobs();
-  const job = findLatestReportJob(jobs, evidenceId);
-  if (!job?.report_id) {
-    return { artefacts: [], reportMeta: null };
+  const candidates = findReportJobs(jobs, evidenceId);
+  for (const job of candidates) {
+    try {
+      const json = await reportsService.getJson(job.report_id);
+      const artefacts = extractArtefacts(json);
+      return {
+        artefacts,
+        reportMeta: {
+          reportId: job.report_id,
+          jobId: job.job_id || job.id,
+          summaryStatistics: json?.summary_statistics || null,
+          evidenceId,
+        },
+      };
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        continue;
+      }
+      throw err;
+    }
   }
-  const json = await reportsService.getJson(job.report_id);
-  const artefacts = extractArtefacts(json);
-  return {
-    artefacts,
-    reportMeta: {
-      reportId: job.report_id,
-      jobId: job.job_id || job.id,
-      summaryStatistics: json?.summary_statistics || null,
-      evidenceId,
-    },
-  };
+  return { artefacts: [], reportMeta: null };
 }
 
 /**
@@ -75,12 +81,28 @@ export function extractArtefacts(json) {
 }
 
 /**
- * Completed pipeline jobs that produced a report.
+ * Completed pipeline jobs that produced a report that still exists.
  */
 export async function listCompletedReports() {
-  const jobs = await pipelineService.listJobs();
+  const [jobs, reports] = await Promise.all([
+    pipelineService.listJobs(),
+    reportsService.list().catch(() => null),
+  ]);
+  const existingIds = reports
+    ? new Set(
+        reports
+          .map((report) => report.report_id || report.id)
+          .filter(Boolean)
+          .map(String)
+      )
+    : null;
+
   return (jobs || [])
-    .filter((job) => job.report_id)
+    .filter((job) => {
+      if (!job.report_id) return false;
+      if (!existingIds) return true;
+      return existingIds.has(String(job.report_id));
+    })
     .map((job) => ({
       reportId: job.report_id,
       evidenceId: job.evidence_id,

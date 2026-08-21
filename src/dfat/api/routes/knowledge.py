@@ -34,14 +34,39 @@ async def knowledge_stats(
     ioc_kb: IOCKnowledgeBase = Depends(get_ioc_knowledge_base),
     knowledge_graph: ForensicKnowledgeGraph = Depends(get_knowledge_graph),
 ) -> KnowledgeStatsResponse:
-    """Return aggregate knowledge-base statistics."""
+    """Return aggregate knowledge-base statistics.
+
+    Unavailable subsystems (e.g. chromadb not installed) are reported as
+    degraded payloads rather than failing the whole request with 500.
+    """
     collection_stats: dict[str, object] = {}
     for collection in ForensicVectorStore.COLLECTIONS:
-        collection_stats[collection] = await vector_store.get_collection_stats(collection)
+        try:
+            collection_stats[collection] = await vector_store.get_collection_stats(
+                collection
+            )
+        except Exception as exc:  # noqa: BLE001
+            collection_stats[collection] = {
+                "name": collection,
+                "count": 0,
+                "available": False,
+                "error": str(exc),
+            }
+
+    try:
+        ioc_statistics = await ioc_kb.get_statistics()
+    except Exception as exc:  # noqa: BLE001
+        ioc_statistics = {"available": False, "error": str(exc), "total_count": 0}
+
+    try:
+        graph_statistics = knowledge_graph.get_statistics()
+    except Exception as exc:  # noqa: BLE001
+        graph_statistics = {"available": False, "error": str(exc)}
+
     return KnowledgeStatsResponse(
         vector_collections=collection_stats,
-        ioc_statistics=await ioc_kb.get_statistics(),
-        graph_statistics=knowledge_graph.get_statistics(),
+        ioc_statistics=ioc_statistics,
+        graph_statistics=graph_statistics,
     )
 
 

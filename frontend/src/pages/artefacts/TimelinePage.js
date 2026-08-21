@@ -199,10 +199,6 @@ export default function TimelinePage() {
       <PageHeader
         title="Timeline Analysis"
         subtitle="Chronological view of timestamped artefact events"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Timeline Analysis" },
-        ]}
         actions={
           <Form.Select
             value={selectedEvidenceId}

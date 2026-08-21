@@ -90,6 +90,10 @@ function formatStorageMb(value) {
 
 function ServiceHealthCard({ name, health }) {
   const healthy = Boolean(health?.is_healthy);
+  const details = health?.details || {};
+  const errorMessage =
+    details.error || details.message || details.reason || null;
+  const remediation = details.remediation || null;
   return (
     <Col xs={12} md={6} lg={4} className="mb-3">
       <Card className="border-0 shadow-sm h-100">
@@ -118,6 +122,14 @@ function ServiceHealthCard({ name, health }) {
             {health?.consecutive_failures > 0 ? (
               <div className="text-warning">
                 Failures: {health.consecutive_failures}
+              </div>
+            ) : null}
+            {!healthy && errorMessage ? (
+              <div className="text-danger mt-2">{errorMessage}</div>
+            ) : null}
+            {!healthy && remediation ? (
+              <div className="mt-1">
+                <code className="small">{remediation}</code>
               </div>
             ) : null}
           </div>
@@ -246,6 +258,18 @@ export default function SystemStatus() {
                               {(phase.degraded_capabilities || []).length > 0 ? (
                                 <div className="small text-warning mt-1">
                                   Degraded: {(phase.degraded_capabilities || []).join(", ")}
+                                </div>
+                              ) : null}
+                              {phase?.details?.vector_store &&
+                              String(phase.details.vector_store).startsWith("unavailable") ? (
+                                <div className="small text-danger mt-1">
+                                  {String(phase.details.vector_store)}
+                                  {phase.details.remediation ? (
+                                    <>
+                                      {" — "}
+                                      <code>{phase.details.remediation}</code>
+                                    </>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>

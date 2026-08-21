@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useHistory } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUnlockAlt, faUser } from "@fortawesome/free-solid-svg-icons";
@@ -47,12 +47,20 @@ export default function Login() {
     AUTH_CONFIG.rememberMeKey,
     false
   );
+  const mountedRef = useRef(true);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const validate = () => {
     const next = {};
@@ -72,9 +80,11 @@ export default function Login() {
     setSubmitting(true);
     try {
       await login(username.trim(), password);
-      // rememberMe already persisted via useLocalStorage setter
+      // Navigate away before any further local state updates — login success
+      // can also remount the tree via AuthProvider, which unmounts this page.
       history.replace(Routes.Dashboard.path);
     } catch (err) {
+      if (!mountedRef.current) return;
       const status = err?.status;
       if (status === 423) {
         const remaining = formatLockoutRemaining(err?.details?.locked_until);
@@ -91,7 +101,9 @@ export default function Login() {
       }
       // Keep password field on failure (do not clear).
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current) {
+        setSubmitting(false);
+      }
     }
   };
 

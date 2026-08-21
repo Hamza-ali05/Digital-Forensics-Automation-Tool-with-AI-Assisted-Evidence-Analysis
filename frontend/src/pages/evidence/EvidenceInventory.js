@@ -44,8 +44,12 @@ import {
 } from "utils/constants";
 import {
   formatBytes,
+  formatCaseId,
   formatDateRelative,
+  formatEvidenceId,
   formatHash,
+  humanizeFileName,
+  humanizeLabel,
 } from "utils/formatters";
 import usePagination from "hooks/usePagination";
 import usePermission from "hooks/usePermission";
@@ -80,9 +84,8 @@ function typeLabel(type) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function shortId(id) {
-  if (!id) return "—";
-  return String(id).slice(0, 8);
+function caseDisplayName(row) {
+  return humanizeLabel(row?.case_name, formatCaseId(row?.case_id) || "Untitled case");
 }
 
 function HashCell({ hash }) {
@@ -264,7 +267,10 @@ export default function EvidenceInventory() {
     try {
       const result = await evidenceService.validate(row.evidence_id);
       if (result?.validation_passed) {
-        success("Validated", `${row.file_name || shortId(row.evidence_id)} passed validation.`);
+        success(
+          "Validated",
+          `${humanizeFileName(row.file_name, formatEvidenceId(row.evidence_id))} passed validation.`
+        );
       } else {
         const failures = (result?.validation_failures || []).join("; ");
         notifyError(
@@ -287,7 +293,7 @@ export default function EvidenceInventory() {
       if (result?.integrity_verified) {
         success(
           "Integrity verified",
-          `${row.file_name || shortId(row.evidence_id)} hash matches.`
+          `${humanizeFileName(row.file_name, formatEvidenceId(row.evidence_id))} hash matches.`
         );
       } else {
         notifyError(
@@ -313,8 +319,9 @@ export default function EvidenceInventory() {
           <Link
             to={Routes.EvidenceDetail.path.replace(":id", row.evidence_id)}
             className="fw-bold"
+            title={row.evidence_id}
           >
-            {shortId(row.evidence_id)}
+            {formatEvidenceId(row.evidence_id)}
           </Link>
         ),
       },
@@ -322,15 +329,22 @@ export default function EvidenceInventory() {
         key: "file_name",
         header: "File Name",
         sortable: true,
-        accessor: "file_name",
+        render: (row) => (
+          <span title={row.file_name || undefined}>
+            {humanizeFileName(row.file_name)}
+          </span>
+        ),
       },
       {
         key: "case",
         header: "Case",
         render: (row) =>
           row.case_id ? (
-            <Link to={Routes.CaseDetail.path.replace(":id", row.case_id)}>
-              {row.case_name || shortId(row.case_id)}
+            <Link
+              to={Routes.CaseDetail.path.replace(":id", row.case_id)}
+              title={row.case_name || row.case_id}
+            >
+              {caseDisplayName(row)}
             </Link>
           ) : (
             "—"
@@ -437,10 +451,6 @@ export default function EvidenceInventory() {
       <PageHeader
         title="Evidence Inventory"
         subtitle="Registered forensic images and memory dumps"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evidence" },
-        ]}
         actions={
           canCreate ? (
             <Button
@@ -481,16 +491,20 @@ export default function EvidenceInventory() {
         </Col>
         <Col xs={12} sm={6} xl={3}>
           <Card border="light" className="shadow-sm h-100">
-            <Card.Body className="py-2">
+            <Card.Body className="py-2 overflow-hidden">
               <h6 className="text-muted mb-2 text-uppercase small fw-bold">
                 By Status
               </h6>
-              <div style={{ maxHeight: 120 }}>
+              <div
+                className="mx-auto"
+                style={{ position: "relative", height: 100, maxWidth: 140 }}
+              >
                 <Doughnut
                   data={statusChart}
                   options={{
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: 4 },
                     plugins: { legend: { display: false } },
                   }}
                 />
@@ -514,7 +528,7 @@ export default function EvidenceInventory() {
                   <option value="">All cases</option>
                   {cases.map((c) => (
                     <option key={c.case_id} value={c.case_id}>
-                      {c.case_name} ({c.status})
+                      {humanizeLabel(c.case_name, formatCaseId(c.case_id))}
                     </option>
                   ))}
                 </Form.Select>

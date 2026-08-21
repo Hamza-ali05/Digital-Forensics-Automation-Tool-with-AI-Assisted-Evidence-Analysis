@@ -27,8 +27,13 @@ import ConfirmDialog from "components/common/ConfirmDialog";
 import PipelineProgressBar from "components/forensic/PipelineProgressBar";
 import { JOB_STATUS } from "utils/constants";
 import {
+  formatCaseId,
   formatDateRelative,
   formatDuration,
+  formatEvidenceId,
+  formatJobId,
+  humanizeFileName,
+  humanizeLabel,
 } from "utils/formatters";
 import usePermission from "hooks/usePermission";
 import useNotification from "hooks/useNotification";
@@ -70,11 +75,6 @@ function toMoment(value) {
   if (moment.isMoment(value)) return value.isValid() ? value : null;
   const m = moment(value);
   return m.isValid() ? m : null;
-}
-
-function shortId(id) {
-  if (!id) return "—";
-  return String(id).slice(0, 8);
 }
 
 function modeLabel(mode) {
@@ -311,7 +311,7 @@ export default function PipelineJobs() {
     try {
       await openDialog({
         title: "Cancel pipeline job?",
-        message: `Cancel job ${shortId(job.job_id)}? In-flight stage work may stop after the current step.`,
+        message: `Cancel job ${formatJobId(job.job_id)}? In-flight stage work may stop after the current step.`,
         confirmLabel: "Cancel Job",
         variant: "danger",
       });
@@ -322,7 +322,7 @@ export default function PipelineJobs() {
     setActionBusy(job.job_id);
     try {
       await pipelineService.cancel(job.job_id);
-      success("Job cancelled", `Pipeline ${shortId(job.job_id)} was cancelled.`);
+      success("Job cancelled", `Pipeline ${formatJobId(job.job_id)} was cancelled.`);
       await loadJobs();
     } catch (err) {
       notifyError("Cancel failed", err?.message || "Could not cancel the job.");
@@ -341,8 +341,9 @@ export default function PipelineJobs() {
           <Link
             to={Routes.PipelineDetail.path.replace(":jobId", row.job_id)}
             className="fw-bold"
+            title={row.job_id}
           >
-            {shortId(row.job_id)}
+            {formatJobId(row.job_id)}
           </Link>
         ),
       },
@@ -351,10 +352,14 @@ export default function PipelineJobs() {
         header: "Evidence",
         render: (row) => {
           const ev = evidenceMap[row.evidence_id];
-          const label = ev?.file_name || shortId(row.evidence_id);
+          const label = humanizeFileName(
+            ev?.file_name,
+            formatEvidenceId(row.evidence_id)
+          );
           return (
             <Link
               to={Routes.EvidenceDetail.path.replace(":id", row.evidence_id)}
+              title={ev?.file_name || row.evidence_id}
             >
               {label}
             </Link>
@@ -366,9 +371,16 @@ export default function PipelineJobs() {
         header: "Case",
         render: (row) => {
           const c = caseMap[row.case_id];
+          const label = humanizeLabel(
+            c?.case_name || row.case_name,
+            formatCaseId(row.case_id)
+          );
           return (
-            <Link to={Routes.CaseDetail.path.replace(":id", row.case_id)}>
-              {c?.case_name || shortId(row.case_id)}
+            <Link
+              to={Routes.CaseDetail.path.replace(":id", row.case_id)}
+              title={c?.case_name || row.case_id}
+            >
+              {label}
             </Link>
           );
         },
@@ -461,10 +473,6 @@ export default function PipelineJobs() {
       <PageHeader
         title="Pipeline Monitor"
         subtitle="Track forensic analysis jobs and launch new pipeline runs"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Pipeline" },
-        ]}
         actions={
           canCreate ? (
             <Button
@@ -506,7 +514,7 @@ export default function PipelineJobs() {
                   <option value="">All cases</option>
                   {cases.map((c) => (
                     <option key={c.case_id} value={c.case_id}>
-                      {c.case_name}
+                      {humanizeLabel(c.case_name, formatCaseId(c.case_id))}
                     </option>
                   ))}
                 </Form.Select>

@@ -21,10 +21,6 @@ export default function EvaluationDashboard() {
       <PageHeader
         title="Evaluation"
         subtitle="Benchmark DFRWS/CFReDS comparisons and review usability studies"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evaluation" },
-        ]}
       />
       <Row className="g-3">
         <Col xs={12} md={6} lg={4}>

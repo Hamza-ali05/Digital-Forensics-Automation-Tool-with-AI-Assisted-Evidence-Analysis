@@ -436,11 +436,6 @@ export default function PipelineDetail() {
             ) : null}
           </>
         }
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Pipeline", to: Routes.Pipeline.path },
-          { label: shortId(jobId) },
-        ]}
         actions={
           <div className="d-flex flex-wrap align-items-center gap-2">
             <StatusBadge status={status} type="pipeline" />

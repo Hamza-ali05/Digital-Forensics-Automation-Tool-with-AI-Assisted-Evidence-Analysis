@@ -232,13 +232,19 @@ if [[ "$NEED_SETUP" -eq 1 ]]; then
 
   START_EPOCH=$(date +%s)
   log "Installing backend dependencies..."
+  # auth is required to import the app; reporting matches QUICKSTART
   if [[ "$USE_VENV" -eq 1 ]]; then
-    python -m pip install -e ".[dev]" --quiet
+    python -m pip install -e ".[dev,auth,reporting]" --quiet
   else
-    python -m pip install -e ".[dev]" --quiet --break-system-packages
+    python -m pip install -e ".[dev,auth,reporting]" --quiet --break-system-packages
   fi
   ELAPSED=$(( $(date +%s) - START_EPOCH ))
   log_ok "Backend dependencies installed (${ELAPSED}s)"
+  if python -m pip install -e ".[intelligence,ml,threat_intel]" --quiet >/dev/null 2>&1; then
+    log_ok "Optional intelligence/ml extras installed"
+  else
+    log_warn "Optional intelligence/ml extras skipped — core app will still run"
+  fi
 
   START_EPOCH=$(date +%s)
   log "Initialising database..."
@@ -297,6 +303,13 @@ else
     log_ok "Using existing environment"
   else
     log_warn "venv not found — using system Python."
+  fi
+
+  # Ensure required auth package is present (older installs used .[dev] only)
+  if ! python -c "import jose" >/dev/null 2>&1; then
+    log "Missing auth dependencies — installing..."
+    python -m pip install -e ".[dev,auth,reporting]" --quiet
+    log_ok "Dependencies updated"
   fi
 fi
 

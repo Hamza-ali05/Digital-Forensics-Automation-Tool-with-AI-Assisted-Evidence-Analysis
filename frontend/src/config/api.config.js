@@ -69,6 +69,7 @@ export const API_ENDPOINTS = {
     CACHE_CLEAR: "/ai/cache",
   },
   REPORTS: {
+    LIST: "/reports",
     BY_ID: (id) => `/reports/${id}`,
     JSON: (id) => `/reports/${id}/json`,
     NARRATIVE: (id) => `/reports/${id}/narrative`,

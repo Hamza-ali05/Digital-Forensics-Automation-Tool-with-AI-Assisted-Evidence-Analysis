@@ -185,11 +185,6 @@ export default function PipelineRun() {
       <PageHeader
         title="Run Pipeline"
         subtitle="Start forensic analysis against validated evidence"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Pipeline", to: Routes.Pipeline.path },
-          { label: "Run" },
-        ]}
       />
 
       <Row className="justify-content-center">

@@ -105,8 +105,12 @@ function auditToActivity(entry, index) {
     entry?.details?.actor ||
     entry?.details?.username ||
     "system";
+  // entry_number alone is not always unique in report audit trails.
+  const stable =
+    entry?.id ||
+    `${entry?.entry_number ?? "n"}-${entry?.timestamp ?? ""}-${index}`;
   return {
-    id: `audit-${entry.entry_number || index}`,
+    id: `audit-${stable}`,
     timestamp: entry.timestamp,
     action: entry.action || "Audit event",
     user,
@@ -197,15 +201,15 @@ export default function Dashboard() {
       return tb - ta;
     });
 
-    const lastWithReport = allJobs.find((job) => job.report_id);
+    const candidates = allJobs.filter((job) => job.report_id);
     let nextActivity = allJobs.slice(0, 10).map(jobToActivity);
     let nextSuspicion = null;
 
-    if (lastWithReport?.report_id) {
+    for (const candidate of candidates) {
       try {
         const [jsonReport, audit] = await Promise.all([
-          reportsService.getJson(lastWithReport.report_id),
-          reportsService.getAuditTrail(lastWithReport.report_id),
+          reportsService.getJson(candidate.report_id),
+          reportsService.getAuditTrail(candidate.report_id),
         ]);
         nextSuspicion =
           jsonReport?.summary_statistics?.by_suspicion_level || null;
@@ -222,8 +226,13 @@ export default function Dashboard() {
           });
           nextActivity = sorted.slice(0, 10).map(auditToActivity);
         }
-      } catch {
-        // Keep pipeline-job activity / empty suspicion chart.
+        break;
+      } catch (err) {
+        // Skip orphaned job.report_id pointers (common after DB cleanup).
+        if (err?.response?.status === 404) {
+          continue;
+        }
+        break;
       }
     }
 
@@ -303,7 +312,6 @@ export default function Dashboard() {
       <PageHeader
         title="Dashboard"
         subtitle="Operational overview of cases, evidence, pipelines, and system health"
-        breadcrumbs={[{ label: "Home", to: Routes.Dashboard.path }, { label: "Dashboard" }]}
       />
 
       {/* TOP — Statistics */}
@@ -357,20 +365,29 @@ export default function Dashboard() {
             <Card.Header className="border-bottom border-light">
               <h5 className="mb-0">Evidence by Category</h5>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="overflow-hidden">
               {loading ? (
                 <SkeletonLoader type="card" rows={1} />
               ) : (
-                <div style={{ maxHeight: 280 }}>
+                <div
+                  className="mx-auto"
+                  style={{ position: "relative", height: 260, maxWidth: 360 }}
+                >
                   <Doughnut
                     data={doughnutData}
                     aria-label="Evidence items by category"
                     role="img"
                     options={{
                       responsive: true,
-                      maintainAspectRatio: true,
+                      maintainAspectRatio: false,
+                      layout: {
+                        padding: 8,
+                      },
                       plugins: {
-                        legend: { position: "bottom" },
+                        legend: {
+                          position: "bottom",
+                          labels: { boxWidth: 12, padding: 12 },
+                        },
                       },
                     }}
                   />

@@ -132,21 +132,38 @@ class AIInitializer:
         degraded: list[str] = []
 
         try:
-            if self._rag_analyzer is not None:
-                retriever = getattr(self._rag_analyzer, "_retriever", None)
+            use_rag = bool(
+                getattr(getattr(self._settings, "ai_engine", None), "use_rag", True)
+            )
+            details["use_rag"] = use_rag
+            if not use_rag:
+                details["rag_available"] = False
+                degraded.append("rag_pipeline")
+                logger.info("RAG disabled in AI settings — standard prompts used")
+            elif self._rag_analyzer is None:
+                details["rag_available"] = False
+                degraded.append("rag_pipeline")
+                logger.info("RAG analyzer not configured — standard prompts used")
+            else:
+                # RAGEnhancedAnalyzer stores the retriever on its context builder.
                 context_builder = getattr(self._rag_analyzer, "_context_builder", None)
-                rag_ok = retriever is not None and context_builder is not None
+                retriever = (
+                    getattr(context_builder, "_retriever", None)
+                    if context_builder is not None
+                    else None
+                )
+                if retriever is None:
+                    retriever = getattr(self._rag_analyzer, "_retriever", None)
+                rag_ok = context_builder is not None and retriever is not None
                 details["rag_available"] = rag_ok
+                details["has_context_builder"] = context_builder is not None
+                details["has_retriever"] = retriever is not None
                 if not rag_ok:
                     degraded.append("rag_pipeline")
                     logger.info(
                         "RAG retriever/context builder not available — "
                         "standard prompts used"
                     )
-            else:
-                details["rag_available"] = False
-                degraded.append("rag_pipeline")
-                logger.info("RAG analyzer not configured — standard prompts used")
         except Exception as exc:  # noqa: BLE001
             details["rag_available"] = False
             details["rag_error"] = str(exc)
@@ -178,6 +195,9 @@ class AIInitializer:
             models: list[dict[str, Any]] = []
             if self._model_registry is not None:
                 registered = self._model_registry.list_models()
+                if not registered:
+                    await self._bootstrap_ml_models()
+                    registered = self._model_registry.list_models()
                 for model in registered:
                     models.append(
                         {
@@ -223,4 +243,21 @@ class AIInitializer:
             details=details,
             is_critical=False,
             degraded_capabilities=degraded,
+        )
+
+    async def _bootstrap_ml_models(self) -> None:
+        """Train a fast synthetic baseline when the registry has no models yet."""
+        if self._model_registry is None:
+            return
+        from dfat.ml.baseline import ensure_baseline_model
+
+        trainer = None
+        ml_settings = None
+        if self._auto_retrainer is not None:
+            trainer = getattr(self._auto_retrainer, "_trainer", None)
+            ml_settings = getattr(self._auto_retrainer, "_settings", None)
+        await ensure_baseline_model(
+            self._model_registry,
+            trainer=trainer,
+            ml_settings=ml_settings,
         )

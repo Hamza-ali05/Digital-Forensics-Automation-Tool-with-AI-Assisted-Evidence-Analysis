@@ -19,8 +19,16 @@ def configure_cors(app: FastAPI, settings: DFATSettings) -> None:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+        allow_headers=[
+            "Accept",
+            "Accept-Language",
+            "Authorization",
+            "Content-Language",
+            "Content-Type",
+            "X-Request-ID",
+        ],
+        expose_headers=["X-Request-ID", "X-Cache"],
         allow_credentials=True,
         max_age=600,
     )

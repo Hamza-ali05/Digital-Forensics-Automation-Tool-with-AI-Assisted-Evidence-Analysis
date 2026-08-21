@@ -51,12 +51,12 @@ USERS = (
 
 CASES = (
     {
-        "case_name": "Dev Sample — Open",
+        "case_name": "Dev Sample",
         "description": "Seeded OPEN case for local development",
         "target_status": "open",
     },
     {
-        "case_name": "Dev Sample — Active",
+        "case_name": "Dev Sample Lab",
         "description": "Seeded ACTIVE case for local development",
         "target_status": "active",
     },

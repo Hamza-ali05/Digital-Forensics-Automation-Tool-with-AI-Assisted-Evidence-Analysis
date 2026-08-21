@@ -27,9 +27,16 @@ function buildDegradedList(status) {
 
   const unhealthy = Object.entries(status.services || {})
     .filter(([, health]) => health && health.is_healthy === false)
-    .map(([name]) => formatServiceName(name));
+    .map(([name, health]) => {
+      const label = formatServiceName(name);
+      const error = health?.details?.error;
+      if (error && /chromadb/i.test(String(error))) {
+        return `${label} (ChromaDB missing)`;
+      }
+      return label;
+    });
 
-  if (status.degraded_mode && !unhealthy.includes("Runtime recovery")) {
+  if (status.degraded_mode && !unhealthy.some((item) => item.includes("Runtime recovery"))) {
     unhealthy.push("Runtime recovery");
   }
 

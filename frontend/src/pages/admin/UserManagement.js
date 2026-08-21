@@ -30,7 +30,6 @@ import useAuth from "hooks/useAuth";
 import useNotification from "hooks/useNotification";
 import useConfirmDialog from "hooks/useConfirmDialog";
 import usersService from "services/users.service";
-import { Routes } from "routes";
 
 function userStatus(user) {
   if (user?.is_locked || user?.locked_until) return "locked";
@@ -267,11 +266,6 @@ export default function UserManagement() {
       <PageHeader
         title="User Management"
         subtitle="Register and deactivate investigator accounts"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Settings", to: Routes.Settings.path },
-          { label: "Users" },
-        ]}
         actions={
           <Button
             variant="primary"

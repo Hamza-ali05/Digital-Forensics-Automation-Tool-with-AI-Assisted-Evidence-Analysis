@@ -130,8 +130,11 @@ def create_app() -> FastAPI:
     """Create and configure the DFAT FastAPI application.
 
     Middleware order (request path, outermost → innermost):
-    RequestID → Compression → SecurityHeaders → RateLimiter → CORS →
+    RequestID → Compression → SecurityHeaders → CORS → RateLimiter →
     Cache → Audit → RequestValidation → routes / GlobalExceptionHandler.
+
+    CORS is outside the rate limiter so short-circuit 429 responses still
+    receive Access-Control-* headers for browser clients.
 
     Returns:
         Configured FastAPI application with DI container attached.
@@ -164,15 +167,17 @@ def create_app() -> FastAPI:
     GlobalExceptionHandler.register(app)
 
     # Middleware registration: last added = outermost on the request path.
+    # CORS must be outermost so every response (including 4xx/5xx) gets
+    # Access-Control-* headers for the React SPA on :3000.
     audit_logger = container.logging.forensic_audit_logger()
     app.add_middleware(RequestValidationMiddleware)
     app.add_middleware(AuditTrailMiddleware, audit_logger=audit_logger)
     app.add_middleware(ResponseCacheMiddleware)
-    configure_cors(app, settings)
     app.add_middleware(RateLimiterMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CompressionMiddleware)
     app.add_middleware(RequestIDMiddleware)
+    configure_cors(app, settings)
 
     api_prefix = API_V1_PREFIX
     app.include_router(health.router, prefix=api_prefix)

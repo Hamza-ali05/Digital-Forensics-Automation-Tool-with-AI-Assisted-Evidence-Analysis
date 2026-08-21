@@ -30,7 +30,6 @@ import useNotification from "hooks/useNotification";
 import healthService from "services/health.service";
 import aiService, { isAiHealthy } from "services/ai.service";
 import pipelineService from "services/pipeline.service";
-import { Routes } from "routes";
 
 function BoolIcon({ ok }) {
   return (
@@ -113,10 +112,6 @@ export default function Settings() {
       <PageHeader
         title="System Settings"
         subtitle="Read-only diagnostics for health, AI engine, parsers, and database"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Settings" },
-        ]}
       />
 
       {error ? (

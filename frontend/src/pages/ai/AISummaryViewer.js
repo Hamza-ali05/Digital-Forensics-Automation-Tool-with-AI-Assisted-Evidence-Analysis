@@ -92,11 +92,21 @@ export default function AISummaryViewer() {
     return reports.filter((item) => String(item.evidenceId) === String(evidenceId));
   }, [reports, evidenceId]);
 
+  const knownReportIds = useMemo(
+    () => new Set(reports.map((item) => String(item.reportId))),
+    [reports]
+  );
+
   const resolvedReportId = useMemo(() => {
-    if (reportId) return reportId;
+    if (reportId && knownReportIds.has(String(reportId))) return reportId;
+    // Drop stale URL/query pointers that no longer exist in the reports API.
+    if (reportId && reports.length && !knownReportIds.has(String(reportId))) {
+      return reportsForEvidence[0]?.reportId || reports[0]?.reportId || "";
+    }
+    if (reportId && !reports.length) return reportId;
     if (reportsForEvidence.length) return reportsForEvidence[0].reportId;
     return "";
-  }, [reportId, reportsForEvidence]);
+  }, [reportId, reportsForEvidence, reports, knownReportIds]);
 
   const loadSummary = useCallback(async (id) => {
     if (!id) {
@@ -114,7 +124,16 @@ export default function AISummaryViewer() {
       setNarrative(typeof text === "string" ? text : text?.summary_text || "");
       setJsonDoc(json);
     } catch (err) {
-      setError(err);
+      if (err?.response?.status === 404) {
+        setError(
+          Object.assign(err, {
+            message:
+              "Report not found. It may have been removed after a database cleanup.",
+          })
+        );
+      } else {
+        setError(err);
+      }
       setNarrative("");
       setJsonDoc(null);
     } finally {
@@ -122,17 +141,31 @@ export default function AISummaryViewer() {
     }
   }, []);
 
+  const pushQuery = useCallback(
+    (nextEvidence, nextReport) => {
+      const params = new URLSearchParams();
+      if (nextEvidence) params.set("evidence_id", nextEvidence);
+      if (nextReport) params.set("report_id", nextReport);
+      const qs = params.toString();
+      history.replace(
+        qs ? `${Routes.AISummary.path}?${qs}` : Routes.AISummary.path
+      );
+    },
+    [history]
+  );
+
   useEffect(() => {
     loadSummary(resolvedReportId).catch(() => {});
   }, [resolvedReportId, loadSummary]);
 
-  const pushQuery = (nextEvidence, nextReport) => {
-    const params = new URLSearchParams();
-    if (nextEvidence) params.set("evidence_id", nextEvidence);
-    if (nextReport) params.set("report_id", nextReport);
-    const qs = params.toString();
-    history.replace(qs ? `${Routes.AISummary.path}?${qs}` : Routes.AISummary.path);
-  };
+  // Keep the address bar in sync when a stale report_id was replaced.
+  useEffect(() => {
+    const urlReport = query.get("report_id") || "";
+    if (!urlReport || !resolvedReportId) return;
+    if (String(urlReport) === String(resolvedReportId)) return;
+    if (!reports.length) return;
+    pushQuery(evidenceId, resolvedReportId);
+  }, [resolvedReportId, reports.length, query, evidenceId, pushQuery]);
 
   const artefacts = useMemo(() => extractArtefacts(jsonDoc), [jsonDoc]);
   const artefactById = useMemo(() => {
@@ -154,11 +187,6 @@ export default function AISummaryViewer() {
       <PageHeader
         title="Investigative Summary"
         subtitle="AI-generated narrative for a completed pipeline report"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "AI Analysis", to: Routes.AIAnalysis.path },
-          { label: "Investigative Summary" },
-        ]}
         actions={
           <Row className="g-2">
             <Col>

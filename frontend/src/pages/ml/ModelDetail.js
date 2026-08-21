@@ -141,11 +141,6 @@ export default function ModelDetail() {
       <PageHeader
         title={decodedName}
         subtitle={`Version ${model.version}`}
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "ML", to: Routes.MLModels.path },
-          { label: decodedName },
-        ]}
       />
 
       <Row className="g-3 mb-3">

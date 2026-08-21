@@ -74,7 +74,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     # (tokens_per_minute, capacity)
     _AUTH_RATE = (10.0, 10)
     _EVIDENCE_UPLOAD_RATE = (5.0, 5)
-    _GENERAL_RATE = (60.0, 60)
+    # SPA dashboards fan out many GETs on load; 60/min caused false 429s.
+    _GENERAL_RATE = (300.0, 120)
     _BUCKET_TTL_SECONDS = 600.0
 
     def __init__(self, app: object) -> None:
@@ -149,8 +150,15 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if os.environ.get("DFAT_E2E_SOFT_ACQUIRE") == "1":
             return await call_next(request)
 
+        # Preflight and health probes must not consume the general SPA budget.
+        if request.method.upper() == "OPTIONS":
+            return await call_next(request)
+        path = request.url.path
+        if path.startswith("/api/v1/health") or path in {"/health", "/ready", "/live"}:
+            return await call_next(request)
+
         ip = self._client_ip(request)
-        group = self._endpoint_group(request.method, request.url.path)
+        group = self._endpoint_group(request.method, path)
         rate_per_minute, capacity = self._rate_for_group(group)
         bucket = self._get_bucket(f"{ip}:{group}", rate_per_minute, capacity)
 

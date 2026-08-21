@@ -20,13 +20,35 @@ function getRowKey(row, index) {
 }
 
 function cellValue(row, column) {
+  let value;
   if (typeof column.render === "function") {
-    return column.render(row);
+    value = column.render(row);
+  } else if (column.accessor) {
+    value = row?.[column.accessor];
+  } else {
+    value = row?.[column.key];
   }
-  if (column.accessor) {
-    return row?.[column.accessor];
+
+  // Never dump plain objects/arrays into table cells (React would warn / show junk).
+  if (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !React.isValidElement(value)
+  ) {
+    return (
+      value.label ||
+      value.name ||
+      value.full_name ||
+      value.username ||
+      value.title ||
+      "—"
+    );
   }
-  return row?.[column.key];
+  if (Array.isArray(value)) {
+    return value.length ? String(value.length) : "—";
+  }
+  return value;
 }
 
 /**

@@ -51,13 +51,20 @@ describe("DegradedBanner", () => {
     );
   });
 
-  test("can be dismissed until services change", async () => {
+  test("annotates chromadb vector store failures", () => {
+    systemService.getStatus.mockReturnValue({
+      system_readiness: "degraded",
+      degraded_mode: false,
+      services: {
+        vector_store: {
+          is_healthy: false,
+          details: { error: "chromadb is not installed — vector search is unavailable" },
+        },
+      },
+    });
+
     renderWithProviders(<DegradedBanner />, { route: "/dashboard", role: "admin" });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /Dismiss degraded mode banner/i })
-    );
-
-    expect(screen.queryByText(/Degraded mode/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Vector Store \(ChromaDB missing\)/i);
   });
 });

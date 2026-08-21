@@ -58,14 +58,59 @@ function toMoment(value) {
 }
 
 function leadInvestigatorLabel(row) {
+  const investigators = Array.isArray(row?.investigators) ? row.investigators : [];
   const lead =
-    (row.investigators || []).find((inv) => inv.role === "lead") || null;
-  if (lead?.full_name) return lead.full_name;
-  if (lead?.username) return lead.username;
-  if (row.lead_investigator_id) {
-    return String(row.lead_investigator_id).slice(0, 8);
+    investigators.find((inv) => String(inv?.role || "").toLowerCase() === "lead") ||
+    investigators[0] ||
+    null;
+
+  const name =
+    (typeof lead?.full_name === "string" && lead.full_name.trim()) ||
+    (typeof lead?.username === "string" && lead.username.trim()) ||
+    (typeof row?.lead_investigator_name === "string" &&
+      row.lead_investigator_name.trim()) ||
+    (typeof row?.lead_investigator === "string" && row.lead_investigator.trim()) ||
+    "";
+
+  if (name) return name;
+  // Never dump raw UUIDs / objects into the table — show a clear label instead.
+  if (row?.lead_investigator_id) return "Assigned (name unavailable)";
+  return "Unassigned";
+}
+
+function caseNameLabel(row) {
+  let name = row?.case_name ?? row?.name ?? "";
+  if (name && typeof name === "object") {
+    name = name.case_name || name.name || name.label || "";
   }
-  return "—";
+  name = String(name || "").trim();
+  if (!name) return formatCaseId(row?.case_id) || "Untitled case";
+
+  // Strip trailing status words accidentally baked into seed/case titles
+  // (e.g. "Dev Sample — Active") so StatusBadge is the only status UI.
+  const statusTokens = Object.values(CASE_STATUS)
+    .map((value) => String(value).replace(/_/g, "[ _]"))
+    .join("|");
+  const stripped = name
+    .replace(new RegExp(`[\\s]*[—–-][\\s]*(${statusTokens})$`, "i"), "")
+    .replace(
+      new RegExp(
+        `[\\s]*[—–-][\\s]*(Created|Open|Active|Under Review|Closed|Archived)$`,
+        "i"
+      ),
+      ""
+    )
+    .trim();
+  return stripped || name;
+}
+
+function evidenceCountLabel(row) {
+  const count = Number(
+    row?.evidence_count ??
+      (Array.isArray(row?.evidence_ids) ? row.evidence_ids.length : 0)
+  );
+  if (!Number.isFinite(count) || count <= 0) return "No evidence";
+  return count === 1 ? "1 item" : `${count} items`;
 }
 
 /**
@@ -227,6 +272,7 @@ export default function CaseList() {
           <Link
             to={Routes.CaseDetail.path.replace(":id", row.case_id)}
             className="fw-bold"
+            title={row.case_id}
           >
             {formatCaseId(row.case_id)}
           </Link>
@@ -236,7 +282,7 @@ export default function CaseList() {
         key: "case_name",
         header: "Case Name",
         sortable: true,
-        accessor: "case_name",
+        render: (row) => caseNameLabel(row),
       },
       {
         key: "status",
@@ -253,7 +299,7 @@ export default function CaseList() {
         key: "evidence_count",
         header: "Evidence Count",
         sortable: true,
-        render: (row) => row.evidence_count ?? row.evidence_ids?.length ?? 0,
+        render: (row) => evidenceCountLabel(row),
       },
       {
         key: "created_at",
@@ -316,10 +362,6 @@ export default function CaseList() {
       <PageHeader
         title="Cases"
         subtitle="Investigate and manage forensic cases"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Cases" },
-        ]}
         actions={
           canCreate ? (
             <Button

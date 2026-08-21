@@ -150,11 +150,29 @@ class ServiceMonitor:
         }
 
     async def _vector_store_check(self) -> tuple[bool, dict[str, Any]]:
+        # Import lazily so the monitor mirrors the optional-dependency gate used
+        # by ForensicVectorStore (chromadb may be missing in lean installs).
+        from dfat.knowledge.vector_store import chromadb as chroma_mod
+
+        if chroma_mod is None:
+            return False, {
+                "error": "chromadb is not installed — vector search is unavailable",
+                "remediation": "pip install 'dfat[intelligence]'",
+                "available": False,
+            }
         try:
             collections = await self._vector_store.list_collections()
-            return True, {"collections": collections, "collection_count": len(collections)}
+            return True, {
+                "collections": collections,
+                "collection_count": len(collections),
+                "available": True,
+            }
         except Exception as exc:  # noqa: BLE001
-            return False, {"error": str(exc)}
+            return False, {
+                "error": str(exc),
+                "remediation": "pip install 'dfat[intelligence]'",
+                "available": False,
+            }
 
     async def _filesystem_check(self) -> tuple[bool, dict[str, Any]]:
         evidence_dir = Path(self._settings.evidence.evidence_dir)

@@ -4,8 +4,12 @@ import pipelineService from "services/pipeline.service";
 
 /**
  * Report fetch, export, verify, and audit helpers.
- * There is no backend report-list endpoint — totals are derived from jobs.
  */
+export async function list() {
+  const { data } = await apiGet(API_ENDPOINTS.REPORTS.LIST);
+  return Array.isArray(data) ? data : data?.items || [];
+}
+
 export async function getById(id) {
   const { data } = await apiGet(API_ENDPOINTS.REPORTS.BY_ID(id));
   return data;
@@ -95,19 +99,23 @@ export async function exportJson(id) {
 }
 
 /**
- * Count generated reports via completed pipeline jobs that expose report_id.
+ * Count persisted reports from the reports API (not orphaned job pointers).
  */
 export async function getTotal() {
-  const jobs = await pipelineService.listJobs();
-  const ids = new Set(
-    (jobs || [])
-      .map((job) => job.report_id)
-      .filter(Boolean)
-  );
-  return ids.size;
+  try {
+    const reports = await list();
+    return reports.length;
+  } catch {
+    const jobs = await pipelineService.listJobs();
+    const ids = new Set(
+      (jobs || []).map((job) => job.report_id).filter(Boolean)
+    );
+    return ids.size;
+  }
 }
 
 const reportsService = {
+  list,
   getById,
   getJson,
   getNarrative,

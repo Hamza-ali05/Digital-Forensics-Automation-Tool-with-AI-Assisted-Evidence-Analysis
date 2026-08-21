@@ -616,10 +616,6 @@ export default function ArtefactExplorer() {
             "Select evidence with a completed pipeline report to explore artefacts."
           )
         }
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Artefact Explorer" },
-        ]}
         actions={
           <Form.Select
             value={selectedEvidenceId}

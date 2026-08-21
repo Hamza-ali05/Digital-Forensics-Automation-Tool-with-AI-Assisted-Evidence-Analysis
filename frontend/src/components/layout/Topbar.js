@@ -19,7 +19,6 @@ import {
   Navbar,
 } from "@themesberg/react-bootstrap";
 
-import Breadcrumbs from "components/layout/Breadcrumbs";
 import { API_ENDPOINTS } from "config/api.config";
 import useAuth from "hooks/useAuth";
 import useNotification from "hooks/useNotification";
@@ -36,7 +35,7 @@ function formatLastLogin(value) {
 }
 
 /**
- * Dashboard top bar: mobile toggle, breadcrumbs, AI health, notifications, user menu.
+ * Dashboard top bar: mobile toggle, AI health, notifications, user menu.
  */
 export default function Topbar({ onToggleSidebar }) {
   const history = useHistory();
@@ -86,7 +85,7 @@ export default function Topbar({ onToggleSidebar }) {
     <Navbar variant="dark" expanded className="ps-0 pe-2 pb-0" aria-label="Toolbar">
       <Container fluid className="px-0">
         <div className="d-flex justify-content-between w-100 align-items-center">
-          <div className="d-flex align-items-center flex-grow-1 min-w-0">
+          <div className="d-flex align-items-center">
             <Button
               variant="link"
               className="d-md-none text-dark px-2 me-1"
@@ -95,9 +94,6 @@ export default function Topbar({ onToggleSidebar }) {
             >
               <FontAwesomeIcon icon={faBars} aria-hidden="true" />
             </Button>
-            <div className="flex-grow-1 min-w-0 d-none d-sm-block">
-              <Breadcrumbs compact />
-            </div>
           </div>
 
           <Nav className="align-items-center flex-nowrap">

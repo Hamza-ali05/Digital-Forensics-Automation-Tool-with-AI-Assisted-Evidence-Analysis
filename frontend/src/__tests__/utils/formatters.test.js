@@ -1,9 +1,14 @@
 import {
   formatBytes,
+  formatCaseId,
   formatDate,
   formatDuration,
+  formatEvidenceId,
   formatHash,
+  formatJobId,
   formatPercentage,
+  humanizeFileName,
+  humanizeLabel,
 } from "utils/formatters";
 
 describe("formatters", () => {
@@ -33,5 +38,21 @@ describe("formatters", () => {
   test("test_formatPercentage", () => {
     expect(formatPercentage(87.5)).toBe("87.5%");
     expect(formatPercentage(100, 0)).toBe("100%");
+  });
+
+  test("test_formatEvidenceId_and_caseId", () => {
+    expect(formatEvidenceId("ab415eeb-1234-5678")).toBe("EVD-ab415e");
+    expect(formatCaseId("cafebabe-0001")).toBe("CASE-cafeba");
+    expect(formatJobId("deadbeef-9999")).toBe("JOB-deadbe");
+  });
+
+  test("test_humanizeFileName_strips_timestamp_suffix", () => {
+    expect(humanizeFileName("inventory-1786663537723.dd")).toBe("inventory.dd");
+    expect(humanizeFileName("disk.E01")).toBe("disk.E01");
+  });
+
+  test("test_humanizeLabel_strips_numeric_and_status_suffixes", () => {
+    expect(humanizeLabel("E2E Case 1786661719092")).toBe("E2E Case");
+    expect(humanizeLabel("Dev Sample — Active")).toBe("Dev Sample");
   });
 });

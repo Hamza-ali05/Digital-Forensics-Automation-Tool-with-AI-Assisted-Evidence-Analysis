@@ -142,6 +142,76 @@ export function formatCaseId(uuid) {
 }
 
 /**
+ * Evidence ID display — ``EVD-{first 6 chars}``.
+ */
+export function formatEvidenceId(uuid) {
+  if (!uuid) return "—";
+  return `EVD-${String(uuid).slice(0, 6)}`;
+}
+
+/**
+ * Pipeline job ID display — ``JOB-{first 6 chars}``.
+ */
+export function formatJobId(uuid) {
+  if (!uuid) return "—";
+  return `JOB-${String(uuid).slice(0, 6)}`;
+}
+
+/**
+ * Strip seed/E2E timestamp suffixes and object wrappers from display names.
+ * e.g. ``E2E Case 1786661719092`` → ``E2E Case``, ``Dev Sample — Active`` → ``Dev Sample``.
+ */
+export function humanizeLabel(value, fallback = "—") {
+  let text = value;
+  if (text != null && typeof text === "object") {
+    text =
+      text.label ||
+      text.name ||
+      text.case_name ||
+      text.file_name ||
+      text.title ||
+      "";
+  }
+  text = String(text || "").trim();
+  if (!text) return fallback;
+
+  text = text
+    // Trailing epoch-style numeric ids: "E2E Case 1786661719092"
+    .replace(/\s+\d{10,}$/g, "")
+    // Trailing status baked into titles: "Dev Sample — Active"
+    .replace(
+      /\s*[—–-]\s*(Created|Open|Active|Under[ _]Review|Closed|Archived|Registered|Validating|Validated|Processing|Processed|Quarantined)$/i,
+      ""
+    )
+    .trim();
+
+  return text || fallback;
+}
+
+/**
+ * Human-readable evidence file name.
+ * e.g. ``inventory-1786663537723.dd`` → ``inventory.dd``.
+ */
+export function humanizeFileName(value, fallback = "Untitled file") {
+  let name = value;
+  if (name != null && typeof name === "object") {
+    name = name.file_name || name.name || name.label || "";
+  }
+  name = String(name || "").trim();
+  if (!name) return fallback;
+
+  // Basename only if a path sneaks through
+  name = name.replace(/^.*[\\/]/, "");
+
+  // Strip -{long digits} before the extension: inventory-1786663537723.dd
+  const cleaned = name.replace(/[-_](\d{10,})(?=\.[^.]+$)/, "");
+  if (cleaned !== name) return cleaned;
+
+  // Or trailing -{digits} with no extension
+  return name.replace(/[-_](\d{10,})$/, "") || fallback;
+}
+
+/**
  * Suspicion level as title case with associated colour.
  * @returns {{ label: string, colour: string }}
  */

@@ -177,12 +177,30 @@ class ForensicVectorStore:
         )
 
     def _get_collection_stats_sync(self, collection: str) -> dict[str, Any]:
-        chroma_collection = self._get_collection(collection)
-        return {
+        """Return document count and metadata for a collection.
+
+        When chromadb is unavailable, returns a degraded payload instead of
+        raising so /knowledge/stats can report availability without a 500.
+        """
+        self._validate_collection_name(collection)
+        base: dict[str, Any] = {
             "name": collection,
             "description": self.COLLECTIONS[collection],
-            "count": chroma_collection.count(),
+            "count": 0,
+            "available": False,
         }
+        if chromadb is None:
+            return {**base, "error": "chromadb is not installed"}
+        try:
+            chroma_collection = self._get_collection(collection)
+            return {
+                "name": collection,
+                "description": self.COLLECTIONS[collection],
+                "count": chroma_collection.count(),
+                "available": True,
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {**base, "error": str(exc)}
 
     def _delete_collection_sync(self, collection: str) -> None:
         self._validate_collection_name(collection)
@@ -190,5 +208,9 @@ class ForensicVectorStore:
         client.delete_collection(name=collection)
 
     def _list_collections_sync(self) -> list[str]:
+        if chromadb is None:
+            raise ImportError(
+                "chromadb is not installed. Install with: pip install 'dfat[intelligence]'"
+            )
         client = self._ensure_client()
         return [item.name for item in client.list_collections()]

@@ -31,7 +31,6 @@ import {
 } from "utils/artefactLoader";
 import threatIntelService from "services/threat-intel.service";
 import useNotification from "hooks/useNotification";
-import { Routes } from "routes";
 
 const TACTIC_ORDER = [
   "Reconnaissance",
@@ -190,10 +189,6 @@ export default function ThreatIntelDashboard() {
       <PageHeader
         title="Threat Intelligence"
         subtitle="YARA, Sigma, IOC coverage and artefact scanning"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Threat Intel" },
-        ]}
         actions={
           <>
             <Button variant="outline-secondary" onClick={load}>

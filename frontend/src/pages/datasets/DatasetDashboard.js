@@ -260,10 +260,6 @@ export default function DatasetDashboard() {
       <PageHeader
         title="Datasets"
         subtitle="Dataset intelligence registry, discovery, and indexing"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Datasets" },
-        ]}
         actions={
           isAdmin ? (
             <Button variant="primary" onClick={handleScan} disabled={scanning}>

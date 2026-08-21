@@ -143,11 +143,6 @@ export default function DatasetDetail() {
       <PageHeader
         title={dataset.name}
         subtitle={`Dataset ${dataset.dataset_id}`}
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Datasets", to: Routes.Datasets.path },
-          { label: dataset.name },
-        ]}
         actions={
           <>
             {isAdmin ? (

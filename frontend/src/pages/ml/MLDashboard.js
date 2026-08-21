@@ -245,10 +245,6 @@ export default function MLDashboard() {
       <PageHeader
         title="Machine Learning"
         subtitle="Model registry, training, and experiment tracking"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "ML" },
-        ]}
         actions={
           <>
             <Button variant="outline-secondary" onClick={load}>

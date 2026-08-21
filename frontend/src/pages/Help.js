@@ -119,10 +119,6 @@ export default function Help() {
       <PageHeader
         title="Help"
         subtitle="Getting started, workflows, roles, and FAQs"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Help" },
-        ]}
       />
 
       <Card border="light" className="shadow-sm mb-4">

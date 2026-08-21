@@ -56,6 +56,16 @@ async def compare_reports(
     return ReproducibilityCompareResponse.model_validate(result.model_dump())
 
 
+@router.get("", response_model=list[ReportResponse])
+async def list_reports(
+    _: UserORM = Depends(require_permission("reports", "read")),
+    report_service: ReportService = Depends(get_report_service),
+) -> list[ReportResponse]:
+    """List all persisted forensic reports (newest first)."""
+    reports = await report_service.list_reports()
+    return [_to_report_response(report) for report in reports]
+
+
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report(
     report_id: str,

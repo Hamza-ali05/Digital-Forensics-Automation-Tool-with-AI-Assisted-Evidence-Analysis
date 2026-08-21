@@ -32,7 +32,6 @@ import ApiErrorDisplay from "components/common/ApiErrorDisplay";
 import EmptyState from "components/common/EmptyState";
 import SkeletonLoader from "components/common/SkeletonLoader";
 import StatCard from "components/forensic/StatCard";
-import { Routes } from "routes";
 import knowledgeService from "services/knowledge.service";
 
 ChartJS.register(
@@ -156,10 +155,6 @@ export default function KnowledgeDashboard() {
       <PageHeader
         title="Knowledge Base"
         subtitle="Vector store, knowledge graph, and IOC intelligence"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Knowledge" },
-        ]}
       />
 
       {error ? <ApiErrorDisplay error={error} onRetry={load} className="mb-3" /> : null}

@@ -353,11 +353,6 @@ export default function BenchmarkResults() {
       <PageHeader
         title="Benchmark History"
         subtitle="Precision, recall, and F1 trends across DFRWS / CFReDS runs"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evaluation", to: Routes.Evaluation.path },
-          { label: "History" },
-        ]}
         actions={
           <Button as={Link} to={Routes.EvaluationBenchmark.path} variant="primary">
             <FontAwesomeIcon icon={faPlay} className="me-2" />

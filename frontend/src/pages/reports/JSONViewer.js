@@ -203,11 +203,6 @@ export default function JSONViewer() {
       <PageHeader
         title="JSON Artefact Data"
         subtitle="Structured evidential JSON layer with integrity verification"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Reports", to: Routes.Reports.path },
-          { label: "JSON Artefact Data" },
-        ]}
         actions={
           <Form.Select
             value={reportId}

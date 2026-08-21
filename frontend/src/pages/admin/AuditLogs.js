@@ -27,7 +27,6 @@ import { formatDate, formatHash } from "utils/formatters";
 import useNotification from "hooks/useNotification";
 import auditService from "services/audit.service";
 import usersService from "services/users.service";
-import { Routes } from "routes";
 
 const STAGE_OPTIONS = [
   { value: "", label: "All stages" },
@@ -288,11 +287,6 @@ export default function AuditLogs() {
       <PageHeader
         title="Audit Logs"
         subtitle="Forensic pipeline and evidence audit trail"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Settings", to: Routes.Settings.path },
-          { label: "Audit Logs" },
-        ]}
         actions={
           <Button variant="outline-secondary" onClick={handleExport}>
             <FontAwesomeIcon icon={faDownload} className="me-2" />

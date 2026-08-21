@@ -316,11 +316,6 @@ export default function IntegrityCheck() {
       <PageHeader
         title="Evidence Integrity Verification"
         subtitle="Compare registered digests against current file hashes (MD5, SHA-1, SHA-256)"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evidence", to: Routes.Evidence.path },
-          { label: "Integrity Check" },
-        ]}
       />
 
       {loadError ? (

@@ -318,11 +318,6 @@ export default function EvidenceDetail() {
       <PageHeader
         title={fileName}
         subtitle={String(evidenceId || "").slice(0, 8)}
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evidence", to: Routes.Evidence.path },
-          { label: fileName },
-        ]}
         actions={
           <div className="d-flex flex-wrap align-items-center gap-2">
             <Badge

@@ -375,10 +375,6 @@ export default function ReportList() {
       <PageHeader
         title="Forensic Reports"
         subtitle="Generated dual-output reports with export and integrity verification"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Reports" },
-        ]}
       />
 
       {error ? (

@@ -58,13 +58,15 @@ async def test_dataset_initializer_exception_degrades() -> None:
 @pytest.mark.asyncio
 async def test_knowledge_initializer_completes_with_mocks() -> None:
     vs = MagicMock()
+    vs.count = MagicMock(return_value=4)
+    vs.add_documents = AsyncMock()
     ee = MagicMock(_model_name="all-MiniLM-L6-v2")
     indexer = MagicMock()
     ioc_kb = MagicMock()
     ioc_kb.get_statistics.return_value = {"total_count": 42}
     graph = MagicMock(_graph=MagicMock(nodes=[1, 2, 3]))
 
-    with patch("dfat.bootstrap.knowledge_initializer.chromadb", create=True):
+    with patch("dfat.knowledge.vector_store.chromadb", object()):
         result = await KnowledgeInitializer(vs, ee, indexer, ioc_kb, graph, _settings()).initialize()
 
     assert result.phase == InitPhase.KNOWLEDGE_BASE
@@ -96,7 +98,9 @@ async def test_ai_initializer_ollama_healthy() -> None:
     llm = AsyncMock()
     health = MagicMock(is_healthy=True, model_name="llama3", response_time_ms=200.0, error=None)
     llm.check_health.return_value = health
-    rag = MagicMock(_retriever=MagicMock(), _context_builder=MagicMock())
+    # Mirror production RAGEnhancedAnalyzer: retriever lives on context_builder.
+    context_builder = MagicMock(_retriever=MagicMock())
+    rag = MagicMock(_context_builder=context_builder, _retriever=None)
     rule_based = MagicMock()
     predictor = MagicMock()
     registry = MagicMock()
@@ -115,6 +119,30 @@ async def test_ai_initializer_ollama_healthy() -> None:
     assert result.details["capabilities"]["rag"] is True
     assert result.details["capabilities"]["ml"] is True
     assert result.details["capabilities"]["fallback"] is True
+
+
+@pytest.mark.asyncio
+async def test_ai_initializer_rag_available_via_context_builder() -> None:
+    llm = AsyncMock()
+    llm.check_health.return_value = MagicMock(
+        is_healthy=True, model_name="llama3", response_time_ms=10.0, error=None
+    )
+    rag = MagicMock(
+        _context_builder=MagicMock(_retriever=MagicMock()),
+        _retriever=None,
+    )
+    registry = MagicMock()
+    registry.list_models.return_value = [
+        MagicMock(model_name="MalwareClassifier", version="1"),
+    ]
+
+    result = await AIInitializer(
+        llm, rag, MagicMock(), MagicMock(), registry, MagicMock(_settings=MagicMock()), _settings()
+    ).initialize_rag()
+
+    assert result.status == InitStatus.COMPLETED
+    assert "rag_pipeline" not in result.degraded_capabilities
+    assert result.details["rag_available"] is True
 
 
 @pytest.mark.asyncio

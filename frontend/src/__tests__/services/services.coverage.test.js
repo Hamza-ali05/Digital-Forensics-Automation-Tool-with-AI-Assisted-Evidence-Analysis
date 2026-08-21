@@ -131,6 +131,13 @@ describe("service method coverage (mocked api)", () => {
     await reportsService.exportJson("r1");
 
     api.apiGet.mockResolvedValueOnce({
+      data: [{ report_id: "r1" }, { report_id: "r1" }],
+    });
+    // list() returns two rows; getTotal counts list length (API is source of truth).
+    expect(await reportsService.getTotal()).toBe(2);
+
+    api.apiGet.mockRejectedValueOnce(new Error("list unavailable"));
+    api.apiGet.mockResolvedValueOnce({
       data: [
         { job_id: "j1", report_id: "r1" },
         { job_id: "j2", report_id: "r1" },
@@ -141,7 +148,7 @@ describe("service method coverage (mocked api)", () => {
 
     api.apiGet
       .mockResolvedValueOnce({
-        data: [{ job_id: "j1", report_id: "r1" }],
+        data: [{ report_id: "r1" }],
       })
       .mockResolvedValueOnce({
         data: {

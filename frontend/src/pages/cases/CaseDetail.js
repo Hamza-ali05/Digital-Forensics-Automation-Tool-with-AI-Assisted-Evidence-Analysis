@@ -594,11 +594,6 @@ export default function CaseDetail() {
       <PageHeader
         title={caseData?.case_name || "Case Detail"}
         subtitle={formatCaseId(caseId)}
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Cases", to: Routes.Cases.path },
-          { label: caseData?.case_name || "Detail" },
-        ]}
         actions={
           <div className="d-flex align-items-center flex-wrap gap-2">
             <StatusBadge status={status} type="case" />

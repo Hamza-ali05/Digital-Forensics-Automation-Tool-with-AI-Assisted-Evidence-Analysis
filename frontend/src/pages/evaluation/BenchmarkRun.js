@@ -272,11 +272,6 @@ export default function BenchmarkRun() {
       <PageHeader
         title="Benchmark Evaluation"
         subtitle="Compare recovered artefacts against local DFRWS or CFReDS ground truth"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evaluation", to: Routes.Evaluation.path },
-          { label: "Benchmark" },
-        ]}
         actions={
           <Button
             as={Link}

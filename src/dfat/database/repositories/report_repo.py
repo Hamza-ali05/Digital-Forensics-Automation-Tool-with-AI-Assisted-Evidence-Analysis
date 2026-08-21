@@ -54,10 +54,12 @@ class SQLAlchemyReportRepository(IReportRepository):
             return report_orm_to_domain(orm) if orm is not None else None
 
     async def list_all(self) -> list[ForensicReport]:  # type: ignore[override]
-        """List all forensic reports."""
+        """List all forensic reports (newest first)."""
         async with self._session_factory() as session:
             try:
-                result = await session.execute(select(ReportRecordORM))
+                result = await session.execute(
+                    select(ReportRecordORM).order_by(ReportRecordORM.created_at.desc())
+                )
                 rows = result.scalars().all()
             except SQLAlchemyError as exc:
                 raise DatabaseError(

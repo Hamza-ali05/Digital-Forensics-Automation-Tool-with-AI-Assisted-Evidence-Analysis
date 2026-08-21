@@ -253,10 +253,6 @@ export default function IOCDashboard() {
       <PageHeader
         title="Indicators of Compromise"
         subtitle="Pattern-based threat indicators detected in pipeline artefacts"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Indicators of Compromise" },
-        ]}
         actions={
           <Form.Select
             value={selectedEvidenceId}

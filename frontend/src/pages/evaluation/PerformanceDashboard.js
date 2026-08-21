@@ -385,11 +385,6 @@ export default function PerformanceDashboard() {
       <PageHeader
         title="Performance Analytics"
         subtitle="Time-to-triage, pipeline stage bottlenecks, and parser throughput"
-        breadcrumbs={[
-          { label: "Home", to: Routes.Dashboard.path },
-          { label: "Evaluation", to: Routes.Evaluation.path },
-          { label: "Performance" },
-        ]}
         actions={
           <Button
             as={Link}

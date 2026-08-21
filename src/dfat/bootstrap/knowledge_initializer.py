@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from typing import Any
@@ -59,18 +60,19 @@ class KnowledgeInitializer:
         degraded: list[str] = []
 
         try:
-            import chromadb  # noqa: F401
+            from dfat.knowledge.vector_store import chromadb as chroma_mod
 
-            if chromadb is None:
-                raise ImportError("chromadb is not installed")
-            vs = self._vector_store
-            if hasattr(vs, "_get_client"):
-                vs._get_client()
+            if chroma_mod is None:
+                raise ImportError(
+                    "chromadb is not installed. Install with: pip install 'dfat[intelligence]'"
+                )
+            # Package present — mark ready. Runtime ServiceMonitor probes collections.
             details["vector_store"] = "ready"
-            details["document_count"] = self._document_count()
+            details["document_count"] = await self._ensure_seed_documents()
         except Exception as exc:  # noqa: BLE001
             details["vector_store"] = f"unavailable: {exc}"
             details["document_count"] = 0
+            details["remediation"] = "pip install 'dfat[intelligence]'"
             degraded.append("vector_store")
             logger.warning("ChromaDB unavailable: %s", exc)
 
@@ -121,7 +123,11 @@ class KnowledgeInitializer:
         try:
             ioc_stats: dict[str, Any] = {}
             if hasattr(self._ioc_kb, "get_statistics"):
-                ioc_stats = self._ioc_kb.get_statistics()
+                maybe = self._ioc_kb.get_statistics()
+                if inspect.isawaitable(maybe):
+                    ioc_stats = await maybe
+                else:
+                    ioc_stats = maybe
             details["ioc_total_count"] = ioc_stats.get("total_count", 0)
         except Exception as exc:  # noqa: BLE001
             details["ioc_total_count"] = 0
@@ -151,11 +157,75 @@ class KnowledgeInitializer:
 
     def _document_count(self) -> int:
         vs = self._vector_store
-        if hasattr(vs, "count"):
-            return int(vs.count())
-        if hasattr(vs, "get_document_count"):
-            return int(vs.get_document_count())
+        try:
+            if hasattr(vs, "count") and callable(getattr(vs, "count", None)):
+                value = vs.count()
+                if isinstance(value, (int, float)):
+                    return int(value)
+            if hasattr(vs, "get_document_count") and callable(
+                getattr(vs, "get_document_count", None)
+            ):
+                value = vs.get_document_count()
+                if isinstance(value, (int, float)):
+                    return int(value)
+            if hasattr(vs, "_get_collection_stats_sync"):
+                total = 0
+                collections = getattr(vs, "COLLECTIONS", {"knowledge": None})
+                for name in collections:
+                    try:
+                        stats = vs._get_collection_stats_sync(name)
+                        total += int(stats.get("count", 0) or 0)
+                    except Exception:  # noqa: BLE001
+                        continue
+                return total
+        except Exception:  # noqa: BLE001
+            return 0
         return 0
+
+    async def _ensure_seed_documents(self) -> int:
+        """Seed a small forensic knowledge corpus when the vector store is empty."""
+        count = self._document_count()
+        if count > 0:
+            return count
+        vs = self._vector_store
+        if not hasattr(vs, "add_documents"):
+            return 0
+        documents = [
+            (
+                "Persistence via Run keys is a common Windows technique "
+                "(MITRE ATT&CK T1547.001). Analysts should inspect "
+                "HKCU/HKLM Software\\Microsoft\\Windows\\CurrentVersion\\Run "
+                "for unexpected binaries."
+            ),
+            (
+                "Credential dumping tools such as Mimikatz often target LSASS. "
+                "Memory artefacts showing unusual handles to lsass.exe or "
+                "suspicious process names (mimikatz, procdump) elevate suspicion."
+            ),
+            (
+                "Disk image triage should preserve hash integrity (SHA-256) and "
+                "chain of custody before parsing. Prefer read-only mounts and "
+                "document acquisition timestamps."
+            ),
+            (
+                "Network beacons on uncommon high ports (4444, 5555, 1337) with "
+                "external destinations frequently indicate remote access malware."
+            ),
+        ]
+        metadatas = [
+            {"source": "dfat-seed", "topic": "persistence"},
+            {"source": "dfat-seed", "topic": "credentials"},
+            {"source": "dfat-seed", "topic": "acquisition"},
+            {"source": "dfat-seed", "topic": "network"},
+        ]
+        ids = [f"seed-knowledge-{index}" for index in range(len(documents))]
+        try:
+            await vs.add_documents("knowledge", documents, metadatas, ids)
+            logger.info("Seeded %d documents into knowledge vector store", len(documents))
+            return max(len(documents), self._document_count())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to seed knowledge documents: %s", exc)
+            return self._document_count()
 
     def _graph_node_count(self) -> int:
         graph = self._knowledge_graph
